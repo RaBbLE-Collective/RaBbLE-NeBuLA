@@ -8,29 +8,42 @@
     canvas { display: block; }
     #info { position: absolute; top: 10px; left: 10px; color: #fff; font: 12px monospace; }
   </style>
+
+  <!-- importmap lets the browser resolve bare "three" imports with no build step -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160/build/three.module.js"
+      }
+    }
+  </script>
 </head>
 <body>
   <canvas id="canvas"></canvas>
   <div id="info">Move mouse to control entropy</div>
 
-  <!-- TODO: replace with built bundle once ThreeJsBackend is implemented -->
   <script type="module">
-    // Example usage (requires built dist/ and three.js):
-    //
-    // import { Runtime, PatternGenerator } from '../dist/rabble-nebula.esm.js';
-    //
-    // const runtime = new Runtime('#canvas');
-    // const stream = runtime.createStream('scene');
-    //
-    // PatternGenerator.organic(200, 'sphere').forEach(e => stream.add(e));
-    // runtime.start();
-    //
-    // document.addEventListener('mousemove', (ev) => {
-    //   const entropy = ev.clientX / window.innerWidth;
-    //   stream.forEach(entity => { entity.entropy = entropy; });
-    // });
+    import { Runtime, PatternGenerator } from '../src/index.js';
 
-    document.getElementById('info').textContent = 'Build src/ to run this example';
+    const runtime = new Runtime('#canvas');
+    const stream = runtime.createStream('scene');
+
+    PatternGenerator.organic(200, 'sphere').forEach(e => stream.add(e));
+
+    // TODO: set runtime.backend = new ThreeJsBackend(canvas) once implemented
+    runtime.start();
+
+    document.addEventListener('mousemove', (ev) => {
+      const entropy = ev.clientX / window.innerWidth;
+      stream.forEach(entity => { entity.entropy = entropy; });
+    });
+
+    // show live stats
+    setInterval(() => {
+      const s = runtime.getStats();
+      document.getElementById('info').textContent =
+        `entities: ${s.totalEntities} | entropy: ${s.averageEntropy.toFixed(2)} | fps: ${s.fps.toFixed(0)}`;
+    }, 500);
   </script>
 </body>
 </html>

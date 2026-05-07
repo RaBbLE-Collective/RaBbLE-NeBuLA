@@ -1,1 +1,0 @@
-export { PatternGenerator } from './PatternGenerator';
