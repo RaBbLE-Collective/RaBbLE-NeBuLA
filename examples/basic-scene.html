@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>NeBuLA — Basic Scene</title>
+  <style>
+    body { margin: 0; background: #000; overflow: hidden; }
+    canvas { display: block; }
+    #info { position: absolute; top: 10px; left: 10px; color: #fff; font: 12px monospace; }
+  </style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  <div id="info">Move mouse to control entropy</div>
+
+  <!-- TODO: replace with built bundle once ThreeJsBackend is implemented -->
+  <script type="module">
+    // Example usage (requires built dist/ and three.js):
+    //
+    // import { Runtime, PatternGenerator } from '../dist/rabble-nebula.esm.js';
+    //
+    // const runtime = new Runtime('#canvas');
+    // const stream = runtime.createStream('scene');
+    //
+    // PatternGenerator.organic(200, 'sphere').forEach(e => stream.add(e));
+    // runtime.start();
+    //
+    // document.addEventListener('mousemove', (ev) => {
+    //   const entropy = ev.clientX / window.innerWidth;
+    //   stream.forEach(entity => { entity.entropy = entropy; });
+    // });
+
+    document.getElementById('info').textContent = 'Build src/ to run this example';
+  </script>
+</body>
+</html>
