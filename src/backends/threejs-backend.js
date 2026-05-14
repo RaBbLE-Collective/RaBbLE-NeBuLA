@@ -6,8 +6,10 @@
  * • Geometry cache: one BufferGeometry per primitive type
  * • Material cache: one MeshStandardMaterial per color config
  * • Entropy drives shader parameters: opacity, emissive intensity, scale
+ *
+ * NOTE: Three.js is a peer dependency and must be loaded externally.
+ * This backend gracefully degrades if Three is not available.
  */
-import * as THREE from 'three';
 import { Renderer } from './renderer.js';
 import { palette, hexToNormalizedRgb, hexToRgb } from '../puppet/palette.js';
 
@@ -17,21 +19,32 @@ export class ThreeJsBackend extends Renderer {
     super();
     if (!canvas) throw new Error('ThreeJsBackend requires HTMLCanvasElement');
 
+    // Check if Three.js is available globally
+    const THREE = typeof window !== 'undefined' && window.THREE;
+    if (!THREE) {
+      throw new Error(
+        'ThreeJsBackend requires Three.js to be loaded.\n' +
+        'Load Three.js as a peer dependency before using this backend.\n' +
+        'See: https://threejs.org/docs/#manual/en/introduction/Installation'
+      );
+    }
+
     this._canvas = canvas;
     this._dpr = window.devicePixelRatio || 1;
     this._rafId = null;
+    this._THREE = THREE;
 
     // Three.js objects
-    this._scene = new THREE.Scene();
-    this._scene.background = new THREE.Color(...this._rgbTuple(palette.bg));
-    this._scene.fog = new THREE.Fog(
-      new THREE.Color(...this._rgbTuple(palette.bg)),
+    this._scene = new this._THREE.Scene();
+    this._scene.background = new this._THREE.Color(...this._rgbTuple(palette.bg));
+    this._scene.fog = new this._THREE.Fog(
+      new this._THREE.Color(...this._rgbTuple(palette.bg)),
       2000,
       3500
     );
 
     // Camera
-    this._camera = new THREE.PerspectiveCamera(
+    this._camera = new this._THREE.PerspectiveCamera(
       60,
       canvas.clientWidth / canvas.clientHeight,
       0.1,
@@ -41,7 +54,7 @@ export class ThreeJsBackend extends Renderer {
     this._camera.lookAt(0, 0, 0);
 
     // Renderer
-    this._renderer = new THREE.WebGLRenderer({
+    this._renderer = new this._THREE.WebGLRenderer({
       canvas,
       antialias: true,
       alpha: false,
@@ -50,7 +63,7 @@ export class ThreeJsBackend extends Renderer {
     this._renderer.setPixelRatio(this._dpr);
     this._renderer.setSize(canvas.clientWidth, canvas.clientHeight);
     this._renderer.shadowMap.enabled = true;
-    this._renderer.shadowMap.type = THREE.PCFShadowShadowMap;
+    this._renderer.shadowMap.type = this._THREE.PCFShadowShadowMap;
 
     // Lighting
     this._setupLighting();
@@ -82,11 +95,11 @@ export class ThreeJsBackend extends Renderer {
     const ambientColor = palette.violet;
     const ambientIntensity = 0.5;
     this._scene.add(
-      new THREE.AmbientLight(...this._rgbTuple(ambientColor), ambientIntensity)
+      new this._THREE.AmbientLight(...this._rgbTuple(ambientColor), ambientIntensity)
     );
 
     // Key light (magenta)
-    const keyLight = new THREE.DirectionalLight(...this._rgbTuple(palette.magenta), 1.2);
+    const keyLight = new this._THREE.DirectionalLight(...this._rgbTuple(palette.magenta), 1.2);
     keyLight.position.set(500, 500, 500);
     keyLight.castShadow = true;
     keyLight.shadow.mapSize.width = 2048;
@@ -99,7 +112,7 @@ export class ThreeJsBackend extends Renderer {
     this._scene.add(keyLight);
 
     // Fill light (cyan)
-    const fillLight = new THREE.DirectionalLight(...this._rgbTuple(palette.cyan), 0.8);
+    const fillLight = new this._THREE.DirectionalLight(...this._rgbTuple(palette.cyan), 0.8);
     fillLight.position.set(-300, 200, 200);
     this._scene.add(fillLight);
   }
@@ -119,19 +132,19 @@ export class ThreeJsBackend extends Renderer {
     let geom;
     switch (type) {
       case 'sphere':
-        geom = new THREE.IcosahedronGeometry(10, 3);
+        geom = new this._THREE.IcosahedronGeometry(10, 3);
         break;
       case 'box':
-        geom = new THREE.BoxGeometry(10, 10, 10);
+        geom = new this._THREE.BoxGeometry(10, 10, 10);
         break;
       case 'octahedron':
-        geom = new THREE.OctahedronGeometry(10, 2);
+        geom = new this._THREE.OctahedronGeometry(10, 2);
         break;
       case 'tetrahedron':
-        geom = new THREE.TetrahedronGeometry(10, 1);
+        geom = new this._THREE.TetrahedronGeometry(10, 1);
         break;
       default:
-        geom = new THREE.SphereGeometry(10, 8, 8);
+        geom = new this._THREE.SphereGeometry(10, 8, 8);
     }
 
     geom.computeBoundingSphere();
@@ -148,9 +161,9 @@ export class ThreeJsBackend extends Renderer {
 
     const rgb = hexToNormalizedRgb(colorHex);
     const emissiveIntensity = Math.max(0.3, entropy) * 0.5;
-    const material = new THREE.MeshStandardMaterial({
-      color: new THREE.Color(rgb.r, rgb.g, rgb.b),
-      emissive: new THREE.Color(rgb.r * emissiveIntensity, rgb.g * emissiveIntensity, rgb.b * emissiveIntensity),
+    const material = new this._THREE.MeshStandardMaterial({
+      color: new this._THREE.Color(rgb.r, rgb.g, rgb.b),
+      emissive: new this._THREE.Color(rgb.r * emissiveIntensity, rgb.g * emissiveIntensity, rgb.b * emissiveIntensity),
       metalness: 0.3,
       roughness: 0.7 - entropy * 0.2,
       wireframe: entropy > 1.5,
@@ -207,7 +220,7 @@ export class ThreeJsBackend extends Renderer {
     let instancedMesh = this._instancedMeshes.get(key);
     if (!instancedMesh) {
       const count = 1024; // initial capacity
-      instancedMesh = new THREE.InstancedMesh(geom, mat, count);
+      instancedMesh = new this._THREE.InstancedMesh(geom, mat, count);
       instancedMesh.castShadow = true;
       instancedMesh.receiveShadow = true;
       this._scene.add(instancedMesh);
@@ -283,7 +296,7 @@ export class ThreeJsBackend extends Renderer {
       for (const ent of stream.entities) {
         const color = ent.color || palette.magenta;
         const entropy = ent.entropy || 0.5;
-        const matrix = ent.matrix || new THREE.Matrix4();
+        const matrix = ent.matrix || new this._THREE.Matrix4();
 
         this.addEntity(ent.id, ent.type || 'sphere', color, entropy, matrix);
       }

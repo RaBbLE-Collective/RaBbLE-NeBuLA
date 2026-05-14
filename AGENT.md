@@ -43,16 +43,11 @@ All architecture, roadmap, and identity docs live in the Grimoire. This repo hol
 
 ---
 
-## Pulse Protocol — Commits
+## Commits & Branches
 
-```
-[impulse] ~ [organ] >> [revelation] // %SYSTEM_STATE%
-```
-`spark` new · `harmonize` cleanup · `mend` fix · `transcribe` docs · `ingest` deps · `evolve` epoch
+See Grimoire: `../RaBbLE-Grimoire/common/RaBbLE-CommitStyle.md` (Pulse Protocol)
 
-Full spec: `../RaBbLE-Grimoire/common/RaBbLE-CommitStyle.md`
-
-**Branch rule:** Work on a named branch. Commit per session. `main` only receives complete, tagged episodes.
+**TL;DR:** `[impulse] ~ [organ] >> [revelation] // %STATE%` — `spark` new · `harmonize` cleanup · `mend` fix · `transcribe` docs · `ingest` deps · `evolve` epoch
 
 ---
 
