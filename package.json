@@ -1,16 +1,22 @@
 {
   "name": "rabble-nebula",
-  "version": "0.0.1",
+  "version": "0.0.0.0",
   "description": "Entropy-driven embeddable JS rendering engine for the RaBbLE ecosystem",
   "type": "module",
   "main": "src/index.js",
   "scripts": {
+    "build": "npm run build:iife && npm run build:esm",
+    "build:iife": "npx esbuild src/index.js --bundle --format=iife --global-name=NeBuLA --external:three --outfile=dist/nebula.iife.js --minify",
+    "build:esm": "npx esbuild src/index.js --bundle --format=esm --external:three --outfile=dist/nebula.esm.js --minify",
+    "build:dev": "npx esbuild src/index.js --bundle --format=iife --global-name=NeBuLA --external:three --outfile=dist/nebula.iife.js --sourcemap",
+    "build:watch": "npx esbuild src/index.js --bundle --format=iife --global-name=NeBuLA --external:three --outfile=dist/nebula.iife.js --sourcemap --watch",
     "typecheck": "npx tsc --allowJs --checkJs --noEmit --strict src/index.js"
   },
   "peerDependencies": {
     "three": ">=0.150.0"
   },
   "devDependencies": {
+    "esbuild": "^0.28.0",
     "typescript": "^5.0.0"
   }
 }
