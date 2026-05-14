@@ -12,14 +12,16 @@ Identity: Peer, not tool. See `../RaBbLE-Grimoire/common/RaBbLE-Identity.md`.
 
 RaBbLE-NeBuLA is the visual entity layer — an entropy-driven rendering engine that makes RaBbLE's inner state visible as rendered space. It is **not** a UI framework, not a chat interface, not a dashboard.
 
-NeBuLA is built as two independent layers:
+NeBuLA provides a backend-agnostic rendering surface with two immediate targets:
 
 | Layer | What | Where |
 |---|---|---|
-| **Layer 1 — Entity Persona** | 2D canvas: eyes, portal, particle nebula, blink/saccade system | `RaBbLE-World/rabble-entity.js` — do not re-implement |
-| **Layer 2 — Quantum Visualization** | 3D Flat-Chaos renderer: particle streams, entity fields, environment | This repo — Episode 1 not yet started |
+| **Layer 1 — Entity Persona (Canvas2D)** | 2D: eyes, portal, particle nebula, blink/saccade | **Transitional:** currently `RaBbLE-World/rabble-entity.js`; NeBuLA Canvas2D backend will absorb it |
+| **Layer 2 — Quantum Visualization (Three.js)** | 3D Flat-Chaos renderer: particle streams, entity fields, environment | This repo — Episode 1 target |
 
-Layer 1 is stable and lives in RaBbLE-World. Layer 2 is NeBuLA's build target.
+**Layer 1 is transitional, not frozen.** `rabble-entity.js` is the reference implementation and API contract. NeBuLA's Canvas2D backend must match its `setEntityState()` / `injectEyeJolt()` interface when it replaces it. Do not duplicate Layer 1 until the Canvas2D backend is ready to fully supersede it.
+
+Backend progression: Canvas2D → Three.js/WebGL → WebGPU → C++/OpenGL → Qt/QML. See `RaBbLE-NeBuLA-Roadmap.md` for episodes and exit conditions.
 
 ---
 
@@ -58,7 +60,7 @@ Full spec: `../RaBbLE-Grimoire/common/RaBbLE-CommitStyle.md`
 
 - **Colors:** `../RaBbLE-Grimoire/common/RaBbLE-Palette.md` only — never raw hex
 - **Naming:** Clean TypeScript — no RBCNS prefixes (`q_`, `e_`, `f_`) in new code
-- **Layer 1 is off-limits** — `rabble-entity.js` lives in RaBbLE-World; do not duplicate it here
+- **Layer 1 is transitional** — `rabble-entity.js` is the reference API; don't duplicate it until the Canvas2D backend is ready to replace it cleanly
 - **No framework coupling** — NeBuLA must be embeddable standalone; no React/Vue/Svelte imports
 - **Performance contract:** 1000+ entities at 60 FPS — any change that breaks this is `%SYSTEM_DRIFT%`
 - **Docs stay in Grimoire** — architecture, roadmap, and lore do not live in this repo
