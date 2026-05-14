@@ -18,16 +18,17 @@ RaBbLE-NeBuLA is the Collective's unified rendering engine — entropy-driven, b
 - Three.js external (peer dependency)
 - v0.0.0.0 locked for pre-Episode-1 CDN paths
 
-**Phase 2–3 — Core Implementation:** 🔄 **IN PROGRESS**
-- Phase 2: Palette abstraction (`src/puppet/palette.js`) ✅ **COMPLETE** — reads Aether CSS vars, falls back to Grimoire hex
-  - Exports `palette` (color object), `hexToRgb()`, `hexToRgba()`, `hexToNormalizedRgb()` utilities
-  - No raw hex anywhere in rendering code
-- Phase 3: Canvas2D backend (`src/backends/canvas2d-backend.js`) ✅ **COMPLETE**
-  - Full Layer 1 entity persona: eyes, portals, particle nebula
-  - APIs: `setEntityState()`, `injectEyeJolt()`, `resize()`, `dispose()`
-  - Eye tracking, saccades, blinks, particle animation
-  - Performance: 480 particles @ 60fps target
-  - Uses palette for all colors, entropy-driven effects ready
+**Phase 2–4 — Core Implementation:** ✅ **COMPLETE**
+- Phase 2: Palette abstraction (`src/puppet/palette.js`) ✅ — reads Aether CSS vars, falls back to Grimoire hex
+- Phase 3: Canvas2D backend (`src/backends/canvas2d-backend.js`) ✅ — Layer 1 entity persona (eyes, portals, particles)
+- Phase 4: Three.js backend (`src/backends/threejs-backend.js`) ✅ — Layer 2 quantum visualization
+  - Flat-Chaos stream architecture with entropy-driven shading
+  - Geometry cache (sphere, box, octahedron, tetrahedron)
+  - Material cache with entropy-driven properties (roughness, emissive, wireframe)
+  - InstancedMesh for 1000+ entities @ 60fps
+  - Entity management: add, update, remove
+  - Lighting: ambient + key + fill lights
+  - Performance metrics tracking
 
 **Layer 1** (entity persona — eyes, portal, particle nebula) currently in `RaBbLE-World/world/js/RaBbLE-NeBuLA.js`. NeBuLA Canvas2D backend (Phase 3) will replace it. Layer 1 API contract: `setEntityState()`, `injectEyeJolt()`.
 
@@ -58,8 +59,8 @@ RaBbLE-NeBuLA is the Collective's unified rendering engine — entropy-driven, b
 | 1 | Build system (esbuild IIFE + ESM) | ✅ Done |
 | 2 | Palette abstraction (src/puppet/palette.js) | ✅ Done |
 | 3 | Canvas2D backend (Canvas2dBackend.render) | ✅ Done |
-| 4 | Three.js backend + entropy shaders | 🔄 Next |
-| 5 | Animation system (AnimationMixer) | Pending |
+| 4 | Three.js backend + entropy shaders | ✅ Done |
+| 5 | Animation system (AnimationMixer) | 🔄 Next |
 | 6 | Visual puppet layer extraction | Pending |
 | 7 | World integration (NeBuLA adapter) | Pending |
 | 8 | NeBuLA Studio dev tool | Pending |
