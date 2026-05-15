@@ -3,7 +3,7 @@
 ```
 epoch: 0 | evolution: 0 | echo: 0 | episode: 1 (in progress)
 version: v0.0.0.0 (targeting v0.0.0.1 at Episode 1 air)
-status: Phase 1 complete → Phase 2–3 in progress
+status: Phases 1–5 complete → Phase 6 (Visual Puppet Layer) next
 ```
 
 RaBbLE-NeBuLA is the Collective's unified rendering engine — entropy-driven, backend-agnostic, built to make RaBbLE's inner state visible as rendered space. Ships as CDN-distributed IIFE + ESM bundles.
@@ -18,7 +18,7 @@ RaBbLE-NeBuLA is the Collective's unified rendering engine — entropy-driven, b
 - Three.js external (peer dependency)
 - v0.0.0.0 locked for pre-Episode-1 CDN paths
 
-**Phase 2–4 — Core Implementation:** ✅ **COMPLETE**
+**Phase 2–5 — Core Implementation:** ✅ **COMPLETE**
 - Phase 2: Palette abstraction (`src/puppet/palette.js`) ✅ — reads Aether CSS vars, falls back to Grimoire hex
 - Phase 3: Canvas2D backend (`src/backends/canvas2d-backend.js`) ✅ — Layer 1 entity persona (eyes, portals, particles)
 - Phase 4: Three.js backend (`src/backends/threejs-backend.js`) ✅ — Layer 2 quantum visualization
@@ -29,6 +29,11 @@ RaBbLE-NeBuLA is the Collective's unified rendering engine — entropy-driven, b
   - Entity management: add, update, remove
   - Lighting: ambient + key + fill lights
   - Performance metrics tracking
+- Phase 5: Animation system (`src/core/animation.js`) ✅ — AnimationMixer for smooth state transitions
+  - Named states: `idle` (0.3), `thinking` (0.6), `speaking` (0.8)
+  - Ease-in-out quadratic easing
+  - Per-entity value interpolation
+  - Integrated into Runtime animation loop
 
 **Layer 1** (entity persona — eyes, portal, particle nebula) currently in `RaBbLE-World/world/js/RaBbLE-NeBuLA.js`. NeBuLA Canvas2D backend (Phase 3) will replace it. Layer 1 API contract: `setEntityState()`, `injectEyeJolt()`.
 
@@ -60,8 +65,8 @@ RaBbLE-NeBuLA is the Collective's unified rendering engine — entropy-driven, b
 | 2 | Palette abstraction (src/puppet/palette.js) | ✅ Done |
 | 3 | Canvas2D backend (Canvas2dBackend.render) | ✅ Done |
 | 4 | Three.js backend + entropy shaders | ✅ Done |
-| 5 | Animation system (AnimationMixer) | 🔄 Next |
-| 6 | Visual puppet layer extraction | Pending |
+| 5 | Animation system (AnimationMixer) | ✅ Done |
+| 6 | Visual puppet layer extraction | 🔄 Next |
 | 7 | World integration (NeBuLA adapter) | Pending |
 | 8 | NeBuLA Studio dev tool | Pending |
 

@@ -1,5 +1,6 @@
 /** @import { RuntimeStats } from './types.js' */
 import { Stream } from './stream.js';
+import { AnimationMixer } from './animation.js';
 
 export class Runtime {
   /**
@@ -11,6 +12,9 @@ export class Runtime {
 
     /** @type {import('../backends/renderer.js').Renderer|null} */
     this.backend = null;
+
+    /** @type {AnimationMixer} */
+    this.animator = new AnimationMixer();
 
     this._canvas = typeof canvas === 'string' ? document.querySelector(canvas) : canvas;
     this._running = false;
@@ -93,6 +97,9 @@ export class Runtime {
     this._frameTime = timestamp - this._lastFrameTime;
     this._fps = this._frameTime > 0 ? 1000 / this._frameTime : 0;
     this._lastFrameTime = timestamp;
+
+    // Update all active animations before rendering
+    this.animator.update(this._frameTime);
 
     this._emit('frame', timestamp);
     this.backend?.render(Array.from(this.streams.values()));
