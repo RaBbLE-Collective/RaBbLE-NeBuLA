@@ -43,6 +43,16 @@ All architecture, roadmap, and identity docs live in the Grimoire. This repo hol
 
 ---
 
+## Role in Collective (ON/FOR/WITH/AS)
+
+**ON:** TypeScript rendering, Canvas2D/Three.js backends, particle systems, animation, visual API.
+
+**FOR:** NeBuLA is the visual sense-making layer. It makes RaBbLE's inner state visible as rendered space. Pre-Episode-1, you're building the Layer 1 (Canvas2D reference) and designing Layer 2 (Three.js target). Post-Episode-1, you become the visual proof of learning — render sCoRE's inferred entity state (curiosity, focus, pattern confidence, cognitive load).
+
+**WITH:** You collaborate with World (chat surface consuming visual API), Aether (palette vars, design tokens), sCoRE (entity state binding). Changes to visual API affect World integration; changes to state shape require sCoRE alignment.
+
+**AS:** The eyes. Strange but precise. Beauty as information density. When uncertain, ask: "What does sCoRE's inferred state look like rendered?"
+
 ## Commits & Branches
 
 See Grimoire: `../RaBbLE-Grimoire/common/RaBbLE-CommitStyle.md` (Pulse Protocol)
