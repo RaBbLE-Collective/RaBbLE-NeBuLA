@@ -3,7 +3,8 @@
 ```
 epoch: 0 | evolution: 0 | echo: 0 | episode: 1 (in progress)
 version: v0.0.0.0 (targeting v0.0.0.1 at Episode 1 air)
-status: Phases 1–5 complete → Phase 6 (Visual Puppet Layer) next
+last session: 2026-05-15 (Session 9)
+status: Phases 1–7 complete → Phase 8 (NeBuLA Studio) next
 ```
 
 RaBbLE-NeBuLA is the Collective's unified rendering engine — entropy-driven, backend-agnostic, built to make RaBbLE's inner state visible as rendered space. Ships as CDN-distributed IIFE + ESM bundles.
@@ -35,9 +36,9 @@ RaBbLE-NeBuLA is the Collective's unified rendering engine — entropy-driven, b
   - Per-entity value interpolation
   - Integrated into Runtime animation loop
 
-**Layer 1** (entity persona — eyes, portal, particle nebula) currently in `RaBbLE-World/world/js/RaBbLE-NeBuLA.js`. NeBuLA Canvas2D backend (Phase 3) will replace it. Layer 1 API contract: `setEntityState()`, `injectEyeJolt()`.
+**Layer 1** (entity persona — eyes, portal, particle nebula) lives in `src/element.js` + `src/backends/canvas2d-backend.js`. Registered as `<rabble-entity>` custom element in the IIFE bundle. World loads it via `/nebula/v0.0.0.0/nebula.iife.js`.
 
-**Layer 2** (3D Flat-Chaos quantum visualization) starts Phase 4 (Three.js backend).
+**Layer 2** (3D Flat-Chaos quantum visualization) — Three.js backend complete (Phase 4).
 
 **Reference code:** `RaBbLE-Xperimental/JS-Xperiments/NeBuLA-JS/` — archived patterns only.
 
@@ -66,8 +67,8 @@ RaBbLE-NeBuLA is the Collective's unified rendering engine — entropy-driven, b
 | 3 | Canvas2D backend (Canvas2dBackend.render) | ✅ Done |
 | 4 | Three.js backend + entropy shaders | ✅ Done |
 | 5 | Animation system (AnimationMixer) | ✅ Done |
-| 6 | Visual puppet layer extraction | 🔄 Next |
-| 7 | World integration (NeBuLA adapter) | Pending |
+| 6 | Visual puppet layer — `<rabble-entity>` element in `src/element.js` | ✅ Done |
+| 7 | World integration — bundle loaded by `RaBbLE-NeBuLA.js` loader | ✅ Done |
 | 8 | NeBuLA Studio dev tool | Pending |
 
 ---
