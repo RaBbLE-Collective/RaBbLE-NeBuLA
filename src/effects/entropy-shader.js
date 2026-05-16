@@ -1,24 +1,104 @@
-// Entropy shader — maps entity.entropy (0.0–1.0) to vertex displacement and color variance
-// TODO: implement GLSL generation — see docs/EXTRACTION_ANALYSIS.md §2.3
-
 /**
- * @typedef {Object} EntropyShaderConfig
- * @property {number} [displacementScale] - how much entropy displaces vertices (default 0.3)
- * @property {number} [colorVariance]     - how much entropy shifts hue (default 0.2)
- * @property {number} [animationSpeed]    - rate of entropy-driven animation (default 1.0)
+ * EntropyShader — GLSL shader pair for entropy-driven instanced rendering.
+ * Vertex shader: per-instance size/opacity/emissive + entropy displacement.
+ * Fragment shaders: flat (no glow) and emissive (glow) variants.
  */
 
 export class EntropyShader {
-  /** @param {EntropyShaderConfig} [config] */
   constructor(config = {}) {
-    this.displacementScale = config.displacementScale ?? 0.3;
-    this.colorVariance     = config.colorVariance     ?? 0.2;
-    this.animationSpeed    = config.animationSpeed    ?? 1.0;
+    this.displacementScale = config.displacementScale ?? 0.1;
+    this.colorVariance     = config.colorVariance     ?? 0.15;
+    this.animationSpeed    = config.animationSpeed    ?? 0.5;
   }
 
-  /** @returns {string} GLSL vertex shader source */
-  vertexShader() { throw new Error('EntropyShader.vertexShader() not yet implemented'); }
+  vertexShader() {
+    return `
+      attribute float instanceSize;
+      attribute float instanceOpacity;
+      attribute float instanceEmissive;
+      attribute vec3 instanceColor;
 
-  /** @returns {string} GLSL fragment shader source */
-  fragmentShader() { throw new Error('EntropyShader.fragmentShader() not yet implemented'); }
+      uniform float u_time;
+      uniform float u_entropy;
+
+      varying float v_instanceOpacity;
+      varying float v_instanceEmissive;
+      varying vec3 v_instanceColor;
+      varying vec3 v_position;
+      varying vec3 v_normal;
+
+      void main() {
+        v_instanceOpacity = instanceOpacity;
+        v_instanceEmissive = instanceEmissive;
+        v_instanceColor = instanceColor;
+        v_position = position;
+        v_normal = normal;
+
+        float noise = sin(position.x * 2.0 + u_time) * cos(position.y * 2.0 + u_time * 1.5);
+        float displacement = noise * u_entropy * ${this.displacementScale.toFixed(3)};
+
+        vec3 transformed = position * instanceSize + normal * displacement;
+
+        gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(transformed, 1.0);
+      }
+    `;
+  }
+
+  fragmentShaderFlat() {
+    return `
+      precision highp float;
+
+      uniform float u_time;
+      uniform float u_entropy;
+
+      varying float v_instanceOpacity;
+      varying float v_instanceEmissive;
+      varying vec3 v_instanceColor;
+      varying vec3 v_position;
+      varying vec3 v_normal;
+
+      void main() {
+        vec3 color = v_instanceColor;
+
+        vec3 entropyColor = vec3(
+          sin(v_position.x * 2.0 + u_time) * 0.5 + 0.5,
+          cos(v_position.y * 2.0 + u_time * 1.5) * 0.5 + 0.5,
+          sin(v_position.z * 2.0 + u_time * 0.8) * 0.5 + 0.5
+        );
+        color = mix(color, entropyColor, u_entropy * ${this.colorVariance.toFixed(3)} * 0.33);
+
+        gl_FragColor = vec4(color, v_instanceOpacity);
+      }
+    `;
+  }
+
+  fragmentShaderEmissive() {
+    return `
+      precision highp float;
+
+      uniform float u_time;
+      uniform float u_entropy;
+
+      varying float v_instanceOpacity;
+      varying float v_instanceEmissive;
+      varying vec3 v_instanceColor;
+      varying vec3 v_position;
+      varying vec3 v_normal;
+
+      void main() {
+        vec3 color = v_instanceColor;
+
+        vec3 entropyColor = vec3(
+          sin(v_position.x * 2.0 + u_time) * 0.5 + 0.5,
+          cos(v_position.y * 2.0 + u_time * 1.5) * 0.5 + 0.5,
+          sin(v_position.z * 2.0 + u_time * 0.8) * 0.5 + 0.5
+        );
+        color = mix(color, entropyColor, u_entropy * ${this.colorVariance.toFixed(3)});
+
+        color += color * v_instanceEmissive * 2.0;
+
+        gl_FragColor = vec4(color, v_instanceOpacity);
+      }
+    `;
+  }
 }

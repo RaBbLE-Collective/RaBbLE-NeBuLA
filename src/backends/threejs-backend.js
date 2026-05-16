@@ -1,311 +1,288 @@
 /**
  * Three.js Backend — Layer 2 Quantum Visualization Renderer
  *
- * Flat-Chaos stream architecture with entropy-driven shading.
- * • InstancedMesh for efficient rendering of 1000+ entities @ 60fps
- * • Geometry cache: one BufferGeometry per primitive type
- * • Material cache: one MeshStandardMaterial per color config
- * • Entropy drives shader parameters: opacity, emissive intensity, scale
+ * Flat-Chaos stream architecture with entropy-driven custom shaders.
+ * - InstancedMesh for 1000+ entities at 60fps
+ * - Custom vertex/fragment shaders with per-instance attributes
+ * - Two material types: flat (outlines, portals) and emissive (particles, aura)
+ * - Entropy drives displacement, color variance, and emissive intensity
  *
- * NOTE: Three.js is a peer dependency and must be loaded externally.
- * This backend gracefully degrades if Three is not available.
+ * NOTE: Three.js is a peer dependency loaded externally.
  */
 import { Renderer } from './renderer.js';
-import { palette, hexToNormalizedRgb, hexToRgb } from '../puppet/palette.js';
+import { EntropyShader } from '../effects/entropy-shader.js';
+import { palette, hexToNormalizedRgb } from '../puppet/palette.js';
+
+const MAX_INSTANCES = 2048;
 
 export class ThreeJsBackend extends Renderer {
   /** @param {HTMLCanvasElement} canvas */
-  constructor(canvas) {
+  constructor(canvas, opts = {}) {
     super();
     if (!canvas) throw new Error('ThreeJsBackend requires HTMLCanvasElement');
 
-    // Check if Three.js is available globally
     const THREE = typeof window !== 'undefined' && window.THREE;
     if (!THREE) {
-      throw new Error(
-        'ThreeJsBackend requires Three.js to be loaded.\n' +
-        'Load Three.js as a peer dependency before using this backend.\n' +
-        'See: https://threejs.org/docs/#manual/en/introduction/Installation'
-      );
+      throw new Error('ThreeJsBackend requires Three.js loaded as a peer dependency.');
     }
 
     this._canvas = canvas;
-    this._dpr = window.devicePixelRatio || 1;
-    this._rafId = null;
     this._THREE = THREE;
+    this._dpr = Math.min(window.devicePixelRatio || 1, 2);
+    this._rafId = null;
+    this._time = 0;
+    this._entropy = 0.5;
 
-    // Three.js objects
-    this._scene = new this._THREE.Scene();
-    this._scene.background = new this._THREE.Color(...this._rgbTuple(palette.bg));
-    this._scene.fog = new this._THREE.Fog(
-      new this._THREE.Color(...this._rgbTuple(palette.bg)),
-      2000,
-      3500
+    // Shader system
+    this._shader = new EntropyShader({
+      displacementScale: opts.displacementScale ?? 0.1,
+      colorVariance: opts.colorVariance ?? 0.15,
+      animationSpeed: opts.animationSpeed ?? 0.5,
+    });
+
+    // Scene
+    this._scene = new THREE.Scene();
+    const bgRgb = hexToNormalizedRgb(palette.bg);
+    this._scene.background = new THREE.Color(bgRgb.r, bgRgb.g, bgRgb.b);
+    this._scene.fog = new THREE.Fog(
+      new THREE.Color(bgRgb.r, bgRgb.g, bgRgb.b), 2000, 3500
     );
 
     // Camera
-    this._camera = new this._THREE.PerspectiveCamera(
-      60,
-      canvas.clientWidth / canvas.clientHeight,
-      0.1,
-      10000
+    this._camera = new THREE.PerspectiveCamera(
+      60, canvas.clientWidth / canvas.clientHeight, 0.1, 10000
     );
     this._camera.position.set(0, 0, 300);
-    this._camera.lookAt(0, 0, 0);
 
     // Renderer
-    this._renderer = new this._THREE.WebGLRenderer({
-      canvas,
-      antialias: true,
-      alpha: false,
-      powerPreference: 'high-performance',
+    this._renderer = new THREE.WebGLRenderer({
+      canvas, antialias: true, alpha: false, powerPreference: 'high-performance',
     });
     this._renderer.setPixelRatio(this._dpr);
     this._renderer.setSize(canvas.clientWidth, canvas.clientHeight);
-    this._renderer.shadowMap.enabled = true;
-    this._renderer.shadowMap.type = this._THREE.PCFShadowShadowMap;
 
-    // Lighting
+    // Lighting (ambient + directional for non-shader meshes)
     this._setupLighting();
 
-    // Caches for geometry and materials
-    this._geometryCache = new Map(); // type → BufferGeometry
-    this._materialCache = new Map(); // "color_entropy" → MeshStandardMaterial
-    this._instancedMeshes = new Map(); // "geom_mat" → InstancedMesh
+    // Shader uniforms (shared across all custom materials)
+    this._uniforms = {
+      u_time:    { value: 0 },
+      u_entropy: { value: 0.5 },
+    };
 
-    // Entity tracking
-    this._entities = new Map(); // id → {mesh, index, entropy}
-    this._entityCount = 0;
+    // Shader materials
+    this._flatMaterial = this._createShaderMaterial('flat');
+    this._emissiveMaterial = this._createShaderMaterial('emissive');
 
-    // Performance metrics
+    // Geometry cache
+    this._geometryCache = new Map();
+
+    // Instanced mesh pools: keyed by "geomType_materialType"
+    this._pools = new Map();
+
+    // Entity → pool assignment tracking
+    this._entityMap = new Map();
+
+    // Performance
     this._frameCount = 0;
     this._fps = 60;
     this._lastMetricsTime = performance.now();
 
-    // Setup resize handler
     window.addEventListener('resize', () => this.resize());
-
-    // Start animation loop
-    this._startAnimationLoop();
+    this._startLoop();
   }
 
-  /** Setup lighting for the scene */
   _setupLighting() {
-    // Ambient light
-    const ambientColor = palette.violet;
-    const ambientIntensity = 0.5;
-    this._scene.add(
-      new this._THREE.AmbientLight(...this._rgbTuple(ambientColor), ambientIntensity)
+    const THREE = this._THREE;
+    const violetRgb = hexToNormalizedRgb(palette.violet);
+    this._scene.add(new THREE.AmbientLight(
+      new THREE.Color(violetRgb.r, violetRgb.g, violetRgb.b), 0.5
+    ));
+
+    const magentaRgb = hexToNormalizedRgb(palette.magenta);
+    const key = new THREE.DirectionalLight(
+      new THREE.Color(magentaRgb.r, magentaRgb.g, magentaRgb.b), 1.2
     );
+    key.position.set(500, 500, 500);
+    this._scene.add(key);
 
-    // Key light (magenta)
-    const keyLight = new this._THREE.DirectionalLight(...this._rgbTuple(palette.magenta), 1.2);
-    keyLight.position.set(500, 500, 500);
-    keyLight.castShadow = true;
-    keyLight.shadow.mapSize.width = 2048;
-    keyLight.shadow.mapSize.height = 2048;
-    keyLight.shadow.camera.far = 2000;
-    keyLight.shadow.camera.left = -1000;
-    keyLight.shadow.camera.right = 1000;
-    keyLight.shadow.camera.top = 1000;
-    keyLight.shadow.camera.bottom = -1000;
-    this._scene.add(keyLight);
-
-    // Fill light (cyan)
-    const fillLight = new this._THREE.DirectionalLight(...this._rgbTuple(palette.cyan), 0.8);
-    fillLight.position.set(-300, 200, 200);
-    this._scene.add(fillLight);
+    const cyanRgb = hexToNormalizedRgb(palette.cyan);
+    const fill = new THREE.DirectionalLight(
+      new THREE.Color(cyanRgb.r, cyanRgb.g, cyanRgb.b), 0.8
+    );
+    fill.position.set(-300, 200, 200);
+    this._scene.add(fill);
   }
 
-  /** Convert hex color to RGB tuple (0-1 range) */
-  _rgbTuple(hex) {
-    const rgb = hexToNormalizedRgb(hex);
-    return [rgb.r, rgb.g, rgb.b];
+  _createShaderMaterial(type) {
+    const THREE = this._THREE;
+    const vertexShader = this._shader.vertexShader();
+    const fragmentShader = type === 'emissive'
+      ? this._shader.fragmentShaderEmissive()
+      : this._shader.fragmentShaderFlat();
+
+    return new THREE.ShaderMaterial({
+      uniforms: this._uniforms,
+      vertexShader,
+      fragmentShader,
+      transparent: true,
+      depthWrite: true,
+      side: THREE.DoubleSide,
+    });
   }
 
-  /** Get or create cached geometry */
   _getGeometry(type) {
-    if (this._geometryCache.has(type)) {
-      return this._geometryCache.get(type);
-    }
+    if (this._geometryCache.has(type)) return this._geometryCache.get(type);
 
+    const THREE = this._THREE;
     let geom;
     switch (type) {
-      case 'sphere':
-        geom = new this._THREE.IcosahedronGeometry(10, 3);
-        break;
-      case 'box':
-        geom = new this._THREE.BoxGeometry(10, 10, 10);
-        break;
-      case 'octahedron':
-        geom = new this._THREE.OctahedronGeometry(10, 2);
-        break;
-      case 'tetrahedron':
-        geom = new this._THREE.TetrahedronGeometry(10, 1);
-        break;
-      default:
-        geom = new this._THREE.SphereGeometry(10, 8, 8);
+      case 'sphere':      geom = new THREE.IcosahedronGeometry(10, 3); break;
+      case 'box':         geom = new THREE.BoxGeometry(10, 10, 10); break;
+      case 'tetrahedron': geom = new THREE.TetrahedronGeometry(10, 1); break;
+      case 'plane':       geom = new THREE.PlaneGeometry(10, 10); break;
+      default:            geom = new THREE.SphereGeometry(10, 8, 8); break;
     }
-
-    geom.computeBoundingSphere();
     this._geometryCache.set(type, geom);
     return geom;
   }
 
-  /** Get or create cached material */
-  _getMaterial(colorHex, entropy) {
-    const key = `${colorHex}_${Math.round(entropy * 10)}`;
-    if (this._materialCache.has(key)) {
-      return this._materialCache.get(key);
+  /**
+   * Get or create an instanced mesh pool for a geometry+material combo.
+   * Each pool has per-instance attribute buffers.
+   */
+  _getPool(geomType, matType) {
+    const key = `${geomType}_${matType}`;
+    if (this._pools.has(key)) return this._pools.get(key);
+
+    const THREE = this._THREE;
+    const geom = this._getGeometry(geomType);
+    const mat = matType === 'emissive' ? this._emissiveMaterial : this._flatMaterial;
+
+    const mesh = new THREE.InstancedMesh(geom, mat, MAX_INSTANCES);
+    mesh.count = 0;
+    mesh.frustumCulled = false;
+
+    // Per-instance attributes
+    const sizeAttr    = new THREE.InstancedBufferAttribute(new Float32Array(MAX_INSTANCES), 1);
+    const opacityAttr = new THREE.InstancedBufferAttribute(new Float32Array(MAX_INSTANCES), 1);
+    const emissiveAttr= new THREE.InstancedBufferAttribute(new Float32Array(MAX_INSTANCES), 1);
+    const colorAttr   = new THREE.InstancedBufferAttribute(new Float32Array(MAX_INSTANCES * 3), 3);
+
+    // Set defaults
+    for (let i = 0; i < MAX_INSTANCES; i++) {
+      sizeAttr.setX(i, 1.0);
+      opacityAttr.setX(i, 1.0);
+      emissiveAttr.setX(i, 0.0);
+      colorAttr.setXYZ(i, 1, 1, 1);
     }
 
-    const rgb = hexToNormalizedRgb(colorHex);
-    const emissiveIntensity = Math.max(0.3, entropy) * 0.5;
-    const material = new this._THREE.MeshStandardMaterial({
-      color: new this._THREE.Color(rgb.r, rgb.g, rgb.b),
-      emissive: new this._THREE.Color(rgb.r * emissiveIntensity, rgb.g * emissiveIntensity, rgb.b * emissiveIntensity),
-      metalness: 0.3,
-      roughness: 0.7 - entropy * 0.2,
-      wireframe: entropy > 1.5,
-    });
-    material.castShadow = true;
-    material.receiveShadow = true;
-    this._materialCache.set(key, material);
-    return material;
+    mesh.geometry.setAttribute('instanceSize', sizeAttr);
+    mesh.geometry.setAttribute('instanceOpacity', opacityAttr);
+    mesh.geometry.setAttribute('instanceEmissive', emissiveAttr);
+    mesh.geometry.setAttribute('instanceColor', colorAttr);
+
+    this._scene.add(mesh);
+    const pool = { mesh, sizeAttr, opacityAttr, emissiveAttr, colorAttr, count: 0 };
+    this._pools.set(key, pool);
+    return pool;
   }
 
-  /** Start main animation loop */
-  _startAnimationLoop() {
+  /**
+   * Render streams of entities (Flat-Chaos pattern).
+   * Called each frame by the Runtime.
+   * @param {import('../core/stream.js').Stream[]} streams
+   */
+  render(streams) {
+    if (!streams || streams.length === 0) return;
+
+    // Reset all pool counts
+    for (const pool of this._pools.values()) pool.count = 0;
+    this._entityMap.clear();
+
+    const THREE = this._THREE;
+    const matrix = new THREE.Matrix4();
+
+    for (const stream of streams) {
+      const entities = stream.getAll();
+      for (const ent of entities) {
+        const geomType = ent.geometry || 'sphere';
+        const matType = (ent.entropy > 0.5 || ent.properties?.emissive) ? 'emissive' : 'flat';
+        const pool = this._getPool(geomType, matType);
+
+        if (pool.count >= MAX_INSTANCES) continue;
+
+        const idx = pool.count++;
+        const [x, y, z] = ent.position;
+        const [sx, sy, sz] = ent.scale;
+
+        matrix.makeScale(sx, sy, sz);
+        matrix.setPosition(x, y, z);
+        pool.mesh.setMatrixAt(idx, matrix);
+
+        pool.sizeAttr.setX(idx, (sx + sy + sz) / 3);
+        pool.opacityAttr.setX(idx, ent.opacity ?? 1.0);
+        pool.emissiveAttr.setX(idx, ent.entropy * 0.8);
+
+        if (ent.color) {
+          pool.colorAttr.setXYZ(idx, ent.color[0], ent.color[1], ent.color[2]);
+        } else {
+          const rgb = hexToNormalizedRgb(palette.magenta);
+          pool.colorAttr.setXYZ(idx, rgb.r, rgb.g, rgb.b);
+        }
+      }
+    }
+
+    // Finalize all pools
+    for (const pool of this._pools.values()) {
+      pool.mesh.count = pool.count;
+      pool.mesh.instanceMatrix.needsUpdate = true;
+      pool.sizeAttr.needsUpdate = true;
+      pool.opacityAttr.needsUpdate = true;
+      pool.emissiveAttr.needsUpdate = true;
+      pool.colorAttr.needsUpdate = true;
+    }
+  }
+
+  /** Set global entropy level (drives shader uniforms). */
+  setEntropy(value) {
+    this._entropy = Math.max(0, Math.min(1, value));
+    this._uniforms.u_entropy.value = this._entropy;
+  }
+
+  _startLoop() {
     const animate = () => {
-      this._update();
-      this._render();
+      this._time += 0.016 * this._shader.animationSpeed;
+      this._uniforms.u_time.value = this._time;
+
+      // Gentle camera orbit
+      const elapsed = performance.now() * 0.00008;
+      this._camera.position.x = Math.cos(elapsed) * 300;
+      this._camera.position.z = Math.sin(elapsed) * 300;
+      this._camera.lookAt(0, 0, 0);
+
+      this._renderer.render(this._scene, this._camera);
+      this._updateMetrics();
       this._rafId = requestAnimationFrame(animate);
     };
     this._rafId = requestAnimationFrame(animate);
   }
 
-  /** Update entity state each frame */
-  _update() {
-    // Gentle camera rotation for visual interest
-    const elapsed = performance.now() * 0.0001;
-    this._camera.position.x = Math.cos(elapsed) * 300;
-    this._camera.position.z = Math.sin(elapsed) * 300;
-    this._camera.lookAt(0, 0, 0);
-  }
-
-  /** Render the scene */
-  _render() {
-    this._renderer.render(this._scene, this._camera);
+  _updateMetrics() {
     this._frameCount++;
-  }
-
-  /**
-   * Add or update an entity in the scene
-   * @param {string} id - Unique entity ID
-   * @param {string} type - Geometry type: 'sphere', 'box', etc.
-   * @param {string} color - Hex color
-   * @param {number} entropy - Entropy value (0+)
-   * @param {THREE.Matrix4} matrix - Transform matrix
-   */
-  addEntity(id, type, color, entropy, matrix) {
-    if (this._entities.has(id)) {
-      this.updateEntity(id, color, entropy, matrix);
-      return;
-    }
-
-    const geom = this._getGeometry(type);
-    const mat = this._getMaterial(color, entropy);
-    const key = `${type}_${color}`;
-
-    let instancedMesh = this._instancedMeshes.get(key);
-    if (!instancedMesh) {
-      const count = 1024; // initial capacity
-      instancedMesh = new this._THREE.InstancedMesh(geom, mat, count);
-      instancedMesh.castShadow = true;
-      instancedMesh.receiveShadow = true;
-      this._scene.add(instancedMesh);
-      this._instancedMeshes.set(key, instancedMesh);
-    }
-
-    const index = this._entityCount++;
-    if (matrix) {
-      instancedMesh.setMatrixAt(index, matrix);
-      instancedMesh.instanceMatrix.needsUpdate = true;
-    }
-
-    this._entities.set(id, {
-      mesh: instancedMesh,
-      index,
-      type,
-      color,
-      entropy,
-    });
-  }
-
-  /**
-   * Update an entity's state
-   * @param {string} id - Entity ID
-   * @param {string} color - New color (optional)
-   * @param {number} entropy - New entropy (optional)
-   * @param {THREE.Matrix4} matrix - New transform (optional)
-   */
-  updateEntity(id, color, entropy, matrix) {
-    const entity = this._entities.get(id);
-    if (!entity) return;
-
-    if (matrix && entity.mesh) {
-      entity.mesh.setMatrixAt(entity.index, matrix);
-      entity.mesh.instanceMatrix.needsUpdate = true;
-    }
-
-    if (entropy !== undefined) {
-      entity.entropy = entropy;
-    }
-
-    if (color && color !== entity.color) {
-      // Recolor by updating material
-      entity.color = color;
-      const newMat = this._getMaterial(color, entropy || entity.entropy);
-      entity.mesh.material = newMat;
-    }
-  }
-
-  /**
-   * Remove an entity from the scene
-   * @param {string} id - Entity ID
-   */
-  removeEntity(id) {
-    const entity = this._entities.get(id);
-    if (entity) {
-      // Note: actual removal from InstancedMesh requires reindexing all entities
-      // For now, just remove from tracking
-      this._entities.delete(id);
-    }
-  }
-
-  /**
-   * Render stream of entities (Flat-Chaos)
-   * @param {Stream[]} streams - Array of entity streams
-   */
-  render(streams) {
-    if (!streams || streams.length === 0) return;
-
-    for (const stream of streams) {
-      if (!stream.entities) continue;
-
-      for (const ent of stream.entities) {
-        const color = ent.color || palette.magenta;
-        const entropy = ent.entropy || 0.5;
-        const matrix = ent.matrix || new this._THREE.Matrix4();
-
-        this.addEntity(ent.id, ent.type || 'sphere', color, entropy, matrix);
-      }
+    const now = performance.now();
+    const elapsed = now - this._lastMetricsTime;
+    if (elapsed >= 1000) {
+      this._fps = Math.round(this._frameCount * 1000 / elapsed);
+      this._frameCount = 0;
+      this._lastMetricsTime = now;
     }
   }
 
   resize() {
     const w = this._canvas.clientWidth;
     const h = this._canvas.clientHeight;
+    if (w === 0 || h === 0) return;
     this._camera.aspect = w / h;
     this._camera.updateProjectionMatrix();
     this._renderer.setSize(w, h);
@@ -316,21 +293,24 @@ export class ThreeJsBackend extends Renderer {
       cancelAnimationFrame(this._rafId);
       this._rafId = null;
     }
-
-    // Clean up Three.js resources
-    this._geometryCache.forEach((g) => g.dispose());
-    this._materialCache.forEach((m) => m.dispose());
-    this._instancedMeshes.forEach((im) => im.geometry.dispose());
+    for (const pool of this._pools.values()) {
+      pool.mesh.geometry.dispose();
+    }
+    this._flatMaterial.dispose();
+    this._emissiveMaterial.dispose();
+    this._geometryCache.forEach(g => g.dispose());
     this._renderer.dispose();
   }
 
   getPerformanceMetrics() {
+    let totalEntities = 0;
+    for (const pool of this._pools.values()) totalEntities += pool.count;
     return {
       fps: this._fps,
       frameTime: 1000 / this._fps,
-      entityCount: this._entities.size,
-      drawCalls: this._instancedMeshes.size,
-      materials: this._materialCache.size,
+      entityCount: totalEntities,
+      drawCalls: this._pools.size,
+      pools: this._pools.size,
     };
   }
 }
