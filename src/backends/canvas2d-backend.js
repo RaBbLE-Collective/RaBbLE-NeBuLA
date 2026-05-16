@@ -47,14 +47,16 @@ export class Canvas2dBackend extends Renderer {
       interactive:   opts.interactive   ?? true,
       dpr:           opts.dpr           ?? (window.devicePixelRatio || 1),
       glowScale:     opts.glowScale     ?? 1,
+      onReady:       opts.onReady       ?? null,
     };
 
-    this._canvas   = canvas;
-    this._ctx      = canvas.getContext('2d');
-    this._dpr      = this._opts.dpr;
-    this._t        = 0;
-    this._rafId    = null;
-    this._state    = 'idle';
+    this._canvas      = canvas;
+    this._ctx         = canvas.getContext('2d');
+    this._dpr         = this._opts.dpr;
+    this._t           = 0;
+    this._rafId       = null;
+    this._state       = 'idle';
+    this._readyCalled = false;
 
     // Boot timeline
     this._bootSeq  = new BootSequence();
@@ -396,6 +398,11 @@ export class Canvas2dBackend extends Renderer {
       const blinkScale  = (1 - this._blinkT * 0.93) * emergeScale;
       this._drawEyes(eyeAlpha, blinkScale, emergeScale);
       if (this._opts.showWaveform && eyeAlpha > 0) this._drawWaveform(eyeAlpha * 0.92);
+
+      if (!this._readyCalled && eyeAlpha > 0.95) {
+        this._readyCalled = true;
+        if (typeof this._opts.onReady === 'function') this._opts.onReady();
+      }
     }
   }
 
