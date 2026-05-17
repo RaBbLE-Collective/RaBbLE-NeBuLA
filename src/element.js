@@ -127,6 +127,22 @@ class RaBbLEEntityElement extends HTMLElement {
   injectEyeJolt(dx, dy) {
     if (this._backend) this._backend.injectEyeJolt(dx, dy);
   }
+
+  setEntropy(val) {
+    if (this._backend) this._backend.setEntropy(val);
+  }
+
+  triggerBoot() {
+    if (this._backend) this._backend.triggerBoot();
+  }
+
+  pause() {
+    if (this._backend) this._backend.pause();
+  }
+
+  resume() {
+    if (this._backend) this._backend.resume();
+  }
 }
 
 if (typeof customElements !== 'undefined' && !customElements.get('rabble-entity')) {

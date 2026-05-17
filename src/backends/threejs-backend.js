@@ -1,58 +1,67 @@
 /**
  * Three.js Backend — Layer 2 Quantum Visualization Renderer
  *
- * Flat-Chaos stream architecture with entropy-driven custom shaders.
- * - InstancedMesh for 1000+ entities at 60fps
- * - Custom vertex/fragment shaders with per-instance attributes
- * - Two material types: flat (outlines, portals) and emissive (particles, aura)
- * - Entropy drives displacement, color variance, and emissive intensity
+ * Renders the full RaBbLE entity in 3D: particle nebula, connection lines,
+ * portal arcs, eyes with tracking/blinking, and boot animation.
+ * Mirrors the Canvas2D entity but with orbit capability.
  *
  * NOTE: Three.js is a peer dependency loaded externally.
  */
 import { Renderer } from './renderer.js';
-import { EntropyShader } from '../effects/entropy-shader.js';
+import { BootSequence } from '../core/boot-sequence.js';
 import { palette, hexToNormalizedRgb } from '../puppet/palette.js';
 
-const MAX_INSTANCES = 2048;
+const MAX_INSTANCES = 4096;
+const BODY_COUNT = 2000;
+const AURA_COUNT = 600;
 
 export class ThreeJsBackend extends Renderer {
-  /** @param {HTMLCanvasElement} canvas */
   constructor(canvas, opts = {}) {
     super();
     if (!canvas) throw new Error('ThreeJsBackend requires HTMLCanvasElement');
 
     const THREE = typeof window !== 'undefined' && window.THREE;
-    if (!THREE) {
-      throw new Error('ThreeJsBackend requires Three.js loaded as a peer dependency.');
-    }
+    if (!THREE) throw new Error('ThreeJsBackend requires Three.js loaded as a peer dependency.');
 
     this._canvas = canvas;
     this._THREE = THREE;
     this._dpr = Math.min(window.devicePixelRatio || 1, 2);
     this._rafId = null;
     this._time = 0;
-    this._entropy = 0.5;
+    this._entropy = 0.3;
+    this._state = 'idle';
 
-    // Shader system
-    this._shader = new EntropyShader({
-      displacementScale: opts.displacementScale ?? 0.1,
-      colorVariance: opts.colorVariance ?? 0.15,
-      animationSpeed: opts.animationSpeed ?? 0.5,
-    });
+    // Boot
+    this._bootSeq = new BootSequence();
+    this._inBoot = false;
+    this._bootParticlePositions = null;
+
+    // Blink state
+    this._blinkScale = 1.0;
+    this._lastBlinkTime = 0;
+    this._nextBlinkDelay = 3.5 + Math.random() * 2;
+    this._isBlinking = false;
+    this._blinkStartTime = 0;
+    this._eyeOpenProgress = 1.0;
+
+    // Eye tracking
+    this._mouseX = 0;
+    this._mouseY = 0;
+    this._eyeTargetX = 0;
+    this._eyeTargetY = 0;
+    this._eyeCurrentX = 0;
+    this._eyeCurrentY = 0;
 
     // Scene
     this._scene = new THREE.Scene();
-    const bgRgb = hexToNormalizedRgb(palette.bg);
-    this._scene.background = new THREE.Color(bgRgb.r, bgRgb.g, bgRgb.b);
-    this._scene.fog = new THREE.Fog(
-      new THREE.Color(bgRgb.r, bgRgb.g, bgRgb.b), 2000, 3500
-    );
+    this._scene.background = new THREE.Color(0x020008);
+    this._scene.fog = new THREE.Fog(0x020008, 40, 120);
 
     // Camera
     this._camera = new THREE.PerspectiveCamera(
-      60, canvas.clientWidth / canvas.clientHeight, 0.1, 10000
+      65, canvas.clientWidth / canvas.clientHeight, 0.1, 1000
     );
-    this._camera.position.set(0, 0, 300);
+    this._camera.position.set(0, 0.3, 6);
 
     // Renderer
     this._renderer = new THREE.WebGLRenderer({
@@ -61,27 +70,35 @@ export class ThreeJsBackend extends Renderer {
     this._renderer.setPixelRatio(this._dpr);
     this._renderer.setSize(canvas.clientWidth, canvas.clientHeight);
 
-    // Lighting (ambient + directional for non-shader meshes)
-    this._setupLighting();
+    // Orbit state (manual implementation — no OrbitControls dependency)
+    this._orbitTheta = 0;
+    this._orbitPhi = Math.PI / 2;
+    this._orbitRadius = 6;
+    this._orbitTarget = new THREE.Vector3(0, 0.3, 0);
+    this._isDragging = false;
+    this._lastPointerX = 0;
+    this._lastPointerY = 0;
+    this._autoRotateSpeed = 0.0001;
+    this._setupOrbitControls();
 
-    // Shader uniforms (shared across all custom materials)
-    this._uniforms = {
-      u_time:    { value: 0 },
-      u_entropy: { value: 0.5 },
-    };
+    // Groups
+    this._entityGroup = new THREE.Group();
+    this._eyeGroup = new THREE.Group();
+    this._portalGroup = new THREE.Group();
+    this._connectionGroup = new THREE.Group();
+    this._scene.add(this._entityGroup);
+    this._scene.add(this._connectionGroup);
+    this._scene.add(this._portalGroup);
+    this._scene.add(this._eyeGroup);
 
-    // Shader materials
-    this._flatMaterial = this._createShaderMaterial('flat');
-    this._emissiveMaterial = this._createShaderMaterial('emissive');
+    // Build entity
+    this._buildParticles();
+    this._buildEyes();
+    this._buildPortals();
+    this._buildConnections();
 
-    // Geometry cache
-    this._geometryCache = new Map();
-
-    // Instanced mesh pools: keyed by "geomType_materialType"
-    this._pools = new Map();
-
-    // Entity → pool assignment tracking
-    this._entityMap = new Map();
+    // Mouse tracking for eyes
+    this._setupMouseTracking();
 
     // Performance
     this._frameCount = 0;
@@ -92,174 +109,550 @@ export class ThreeJsBackend extends Renderer {
     this._startLoop();
   }
 
-  _setupLighting() {
-    const THREE = this._THREE;
-    const violetRgb = hexToNormalizedRgb(palette.violet);
-    this._scene.add(new THREE.AmbientLight(
-      new THREE.Color(violetRgb.r, violetRgb.g, violetRgb.b), 0.5
-    ));
+  // ── Orbit Controls (manual) ─────────────────────────────────────────────
 
-    const magentaRgb = hexToNormalizedRgb(palette.magenta);
-    const key = new THREE.DirectionalLight(
-      new THREE.Color(magentaRgb.r, magentaRgb.g, magentaRgb.b), 1.2
-    );
-    key.position.set(500, 500, 500);
-    this._scene.add(key);
+  _setupOrbitControls() {
+    const canvas = this._canvas;
 
-    const cyanRgb = hexToNormalizedRgb(palette.cyan);
-    const fill = new THREE.DirectionalLight(
-      new THREE.Color(cyanRgb.r, cyanRgb.g, cyanRgb.b), 0.8
-    );
-    fill.position.set(-300, 200, 200);
-    this._scene.add(fill);
+    canvas.addEventListener('pointerdown', (e) => {
+      this._isDragging = true;
+      this._lastPointerX = e.clientX;
+      this._lastPointerY = e.clientY;
+      canvas.setPointerCapture(e.pointerId);
+    });
+
+    canvas.addEventListener('pointermove', (e) => {
+      if (!this._isDragging) return;
+      const dx = e.clientX - this._lastPointerX;
+      const dy = e.clientY - this._lastPointerY;
+      this._lastPointerX = e.clientX;
+      this._lastPointerY = e.clientY;
+
+      this._orbitTheta -= dx * 0.005;
+      this._orbitPhi = Math.max(0.3, Math.min(Math.PI - 0.3, this._orbitPhi - dy * 0.005));
+    });
+
+    canvas.addEventListener('pointerup', (e) => {
+      this._isDragging = false;
+      canvas.releasePointerCapture(e.pointerId);
+    });
+
+    canvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      this._orbitRadius = Math.max(3, Math.min(20, this._orbitRadius + e.deltaY * 0.005));
+    }, { passive: false });
   }
 
-  _createShaderMaterial(type) {
-    const THREE = this._THREE;
-    const vertexShader = this._shader.vertexShader();
-    const fragmentShader = type === 'emissive'
-      ? this._shader.fragmentShaderEmissive()
-      : this._shader.fragmentShaderFlat();
+  _updateCamera() {
+    if (!this._isDragging) {
+      this._orbitTheta += this._autoRotateSpeed;
+    }
 
-    return new THREE.ShaderMaterial({
-      uniforms: this._uniforms,
-      vertexShader,
-      fragmentShader,
-      transparent: true,
-      depthWrite: true,
-      side: THREE.DoubleSide,
+    const r = this._orbitRadius;
+    const theta = this._orbitTheta;
+    const phi = this._orbitPhi;
+
+    this._camera.position.set(
+      this._orbitTarget.x + r * Math.sin(phi) * Math.sin(theta),
+      this._orbitTarget.y + r * Math.cos(phi),
+      this._orbitTarget.z + r * Math.sin(phi) * Math.cos(theta)
+    );
+    this._camera.lookAt(this._orbitTarget);
+  }
+
+  // ── Mouse tracking for eyes ─────────────────────────────────────────────
+
+  _setupMouseTracking() {
+    document.addEventListener('mousemove', (e) => {
+      this._mouseX = (e.clientX / window.innerWidth) * 2 - 1;
+      this._mouseY = -(e.clientY / window.innerHeight) * 2 + 1;
     });
   }
 
-  _getGeometry(type) {
-    if (this._geometryCache.has(type)) return this._geometryCache.get(type);
+  // ── Particle system ─────────────────────────────────────────────────────
 
+  _buildParticles() {
     const THREE = this._THREE;
-    let geom;
-    switch (type) {
-      case 'sphere':      geom = new THREE.IcosahedronGeometry(10, 3); break;
-      case 'box':         geom = new THREE.BoxGeometry(10, 10, 10); break;
-      case 'tetrahedron': geom = new THREE.TetrahedronGeometry(10, 1); break;
-      case 'plane':       geom = new THREE.PlaneGeometry(10, 10); break;
-      default:            geom = new THREE.SphereGeometry(10, 8, 8); break;
+
+    // Body particles — instanced spheres
+    const bodyGeom = new THREE.SphereGeometry(0.5, 8, 8);
+    const bodyMat = new THREE.MeshBasicMaterial({
+      transparent: true,
+      depthWrite: false,
+    });
+
+    this._bodyMesh = new THREE.InstancedMesh(bodyGeom, bodyMat, BODY_COUNT);
+    this._bodyMesh.frustumCulled = false;
+    this._bodyMesh.count = BODY_COUNT;
+
+    // Per-instance color
+    const bodyColors = new Float32Array(BODY_COUNT * 3);
+    this._bodyData = [];
+
+    for (let i = 0; i < BODY_COUNT; i++) {
+      const r = 0.3 + Math.pow(Math.random(), 0.45) * 1.7;
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      const normDist = r / 2.0;
+
+      const x = r * Math.sin(phi) * Math.cos(theta);
+      const y = r * Math.sin(phi) * Math.sin(theta);
+      const z = r * Math.cos(phi);
+
+      // Purple inner → blue outer
+      let cr = 0.545 + (0.231 - 0.545) * normDist;
+      let cg = 0.361 + (0.510 - 0.361) * normDist;
+      let cb = 0.965;
+
+      const rnd = Math.random();
+      if (rnd < 0.10) { cr = 0.85; cg = 0.90; cb = 1.0; }
+      else if (rnd < 0.22) { cr = 0.18; cg = 0.12; cb = 0.35; }
+
+      const s = 0.06 + Math.random() * 0.18;
+      const opacity = 0.7 - normDist * 0.3;
+
+      bodyColors[i * 3] = cr;
+      bodyColors[i * 3 + 1] = cg;
+      bodyColors[i * 3 + 2] = cb;
+
+      this._bodyData.push({ x, y, z, s, opacity, phase: Math.random() * Math.PI * 2 });
     }
-    this._geometryCache.set(type, geom);
-    return geom;
+
+    this._bodyMesh.instanceColor = new THREE.InstancedBufferAttribute(bodyColors, 3);
+    this._entityGroup.add(this._bodyMesh);
+
+    // Aura particles
+    const auraGeom = new THREE.SphereGeometry(0.5, 6, 6);
+    const auraMat = new THREE.MeshBasicMaterial({
+      transparent: true,
+      depthWrite: false,
+    });
+
+    this._auraMesh = new THREE.InstancedMesh(auraGeom, auraMat, AURA_COUNT);
+    this._auraMesh.frustumCulled = false;
+    this._auraMesh.count = AURA_COUNT;
+
+    const auraColors = new Float32Array(AURA_COUNT * 3);
+    this._auraData = [];
+
+    const auraColorOptions = [
+      [0.545, 0.361, 0.965],
+      [0.231, 0.510, 0.965],
+      [0.024, 0.714, 0.831],
+      [0.85, 0.90, 1.0],
+    ];
+
+    for (let i = 0; i < AURA_COUNT; i++) {
+      const r = 2.0 + Math.random() * 5.0;
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+
+      const x = r * Math.sin(phi) * Math.cos(theta);
+      const y = r * Math.sin(phi) * Math.sin(theta);
+      const z = r * Math.cos(phi);
+
+      const s = 0.04 + Math.random() * 0.12;
+      const opacity = 0.2 + Math.random() * 0.4;
+      const color = auraColorOptions[Math.floor(Math.random() * auraColorOptions.length)];
+
+      auraColors[i * 3] = color[0];
+      auraColors[i * 3 + 1] = color[1];
+      auraColors[i * 3 + 2] = color[2];
+
+      this._auraData.push({ x, y, z, s, opacity, phase: Math.random() * Math.PI * 2 });
+    }
+
+    this._auraMesh.instanceColor = new THREE.InstancedBufferAttribute(auraColors, 3);
+    this._entityGroup.add(this._auraMesh);
+
+    this._updateParticleMatrices(1.0);
   }
 
-  /**
-   * Get or create an instanced mesh pool for a geometry+material combo.
-   * Each pool has per-instance attribute buffers.
-   */
-  _getPool(geomType, matType) {
-    const key = `${geomType}_${matType}`;
-    if (this._pools.has(key)) return this._pools.get(key);
-
-    const THREE = this._THREE;
-    const geom = this._getGeometry(geomType);
-    const mat = matType === 'emissive' ? this._emissiveMaterial : this._flatMaterial;
-
-    const mesh = new THREE.InstancedMesh(geom, mat, MAX_INSTANCES);
-    mesh.count = 0;
-    mesh.frustumCulled = false;
-
-    // Per-instance attributes
-    const sizeAttr    = new THREE.InstancedBufferAttribute(new Float32Array(MAX_INSTANCES), 1);
-    const opacityAttr = new THREE.InstancedBufferAttribute(new Float32Array(MAX_INSTANCES), 1);
-    const emissiveAttr= new THREE.InstancedBufferAttribute(new Float32Array(MAX_INSTANCES), 1);
-    const colorAttr   = new THREE.InstancedBufferAttribute(new Float32Array(MAX_INSTANCES * 3), 3);
-
-    // Set defaults
-    for (let i = 0; i < MAX_INSTANCES; i++) {
-      sizeAttr.setX(i, 1.0);
-      opacityAttr.setX(i, 1.0);
-      emissiveAttr.setX(i, 0.0);
-      colorAttr.setXYZ(i, 1, 1, 1);
-    }
-
-    mesh.geometry.setAttribute('instanceSize', sizeAttr);
-    mesh.geometry.setAttribute('instanceOpacity', opacityAttr);
-    mesh.geometry.setAttribute('instanceEmissive', emissiveAttr);
-    mesh.geometry.setAttribute('instanceColor', colorAttr);
-
-    this._scene.add(mesh);
-    const pool = { mesh, sizeAttr, opacityAttr, emissiveAttr, colorAttr, count: 0 };
-    this._pools.set(key, pool);
-    return pool;
-  }
-
-  /**
-   * Render streams of entities (Flat-Chaos pattern).
-   * Called each frame by the Runtime.
-   * @param {import('../core/stream.js').Stream[]} streams
-   */
-  render(streams) {
-    if (!streams || streams.length === 0) return;
-
-    // Reset all pool counts
-    for (const pool of this._pools.values()) pool.count = 0;
-    this._entityMap.clear();
-
+  _updateParticleMatrices(convergence) {
     const THREE = this._THREE;
     const matrix = new THREE.Matrix4();
+    const t = this._time;
 
-    for (const stream of streams) {
-      const entities = stream.getAll();
-      for (const ent of entities) {
-        const geomType = ent.geometry || 'sphere';
-        const matType = (ent.entropy > 0.5 || ent.properties?.emissive) ? 'emissive' : 'flat';
-        const pool = this._getPool(geomType, matType);
+    for (let i = 0; i < BODY_COUNT; i++) {
+      const d = this._bodyData[i];
+      const entropyMul = 1 + this._entropy * 0.5;
+      const drift = 0.15 * entropyMul;
 
-        if (pool.count >= MAX_INSTANCES) continue;
+      let px = d.x + Math.sin(d.phase + t * 0.3) * drift;
+      let py = d.y + Math.cos(d.phase * 0.7 + t * 0.2) * drift * 0.8;
+      let pz = d.z + Math.sin(d.phase * 1.3 + t * 0.25) * drift * 0.6;
 
-        const idx = pool.count++;
-        const [x, y, z] = ent.position;
-        const [sx, sy, sz] = ent.scale;
+      if (convergence < 1) {
+        const scatter = (1 - convergence) * 12;
+        px = px * convergence + (Math.sin(i * 0.1) * scatter) * (1 - convergence);
+        py = py * convergence + (Math.cos(i * 0.13) * scatter) * (1 - convergence);
+        pz = pz * convergence + (Math.sin(i * 0.17) * scatter) * (1 - convergence);
+      }
 
-        matrix.makeScale(sx, sy, sz);
-        matrix.setPosition(x, y, z);
-        pool.mesh.setMatrixAt(idx, matrix);
+      const s = d.s;
+      matrix.makeScale(s, s, s);
+      matrix.setPosition(px, py, pz);
+      this._bodyMesh.setMatrixAt(i, matrix);
+    }
+    this._bodyMesh.instanceMatrix.needsUpdate = true;
 
-        pool.sizeAttr.setX(idx, (sx + sy + sz) / 3);
-        pool.opacityAttr.setX(idx, ent.opacity ?? 1.0);
-        pool.emissiveAttr.setX(idx, ent.entropy * 0.8);
+    for (let i = 0; i < AURA_COUNT; i++) {
+      const d = this._auraData[i];
+      const entropyMul = 1 + this._entropy * 0.8;
+      const drift = 0.3 * entropyMul;
 
-        if (ent.color) {
-          pool.colorAttr.setXYZ(idx, ent.color[0], ent.color[1], ent.color[2]);
-        } else {
-          const rgb = hexToNormalizedRgb(palette.magenta);
-          pool.colorAttr.setXYZ(idx, rgb.r, rgb.g, rgb.b);
+      let px = d.x + Math.sin(d.phase + t * 0.15) * drift;
+      let py = d.y + Math.cos(d.phase * 0.6 + t * 0.12) * drift;
+      let pz = d.z + Math.sin(d.phase * 1.1 + t * 0.18) * drift * 0.7;
+
+      if (convergence < 1) {
+        const scatter = (1 - convergence) * 18;
+        px = px * convergence + (Math.cos(i * 0.09) * scatter) * (1 - convergence);
+        py = py * convergence + (Math.sin(i * 0.11) * scatter) * (1 - convergence);
+        pz = pz * convergence + (Math.cos(i * 0.14) * scatter) * (1 - convergence);
+      }
+
+      const s = d.s;
+      matrix.makeScale(s, s, s);
+      matrix.setPosition(px, py, pz);
+      this._auraMesh.setMatrixAt(i, matrix);
+    }
+    this._auraMesh.instanceMatrix.needsUpdate = true;
+  }
+
+  // ── Connection lines ────────────────────────────────────────────────────
+
+  _buildConnections() {
+    const THREE = this._THREE;
+    const maxLines = 200;
+    const positions = new Float32Array(maxLines * 6);
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geom.setDrawRange(0, 0);
+
+    const mat = new THREE.LineBasicMaterial({
+      color: 0x4499ff,
+      transparent: true,
+      opacity: 0.12,
+      depthWrite: false,
+    });
+
+    this._connectionGeom = geom;
+    this._connectionPositions = positions;
+    this._connectionMaxLines = maxLines;
+    this._connectionLines = new THREE.LineSegments(geom, mat);
+    this._connectionGroup.add(this._connectionLines);
+  }
+
+  _updateConnections(convergence) {
+    if (convergence < 0.2) {
+      this._connectionGeom.setDrawRange(0, 0);
+      return;
+    }
+
+    const positions = this._connectionPositions;
+    const maxDist = 1.2 + this._entropy * 0.8;
+    let lineCount = 0;
+    const max = this._connectionMaxLines;
+    const t = this._time;
+
+    // Sample subset of body particles for connections
+    const step = Math.max(1, Math.floor(BODY_COUNT / 120));
+    for (let i = 0; i < BODY_COUNT && lineCount < max; i += step) {
+      const di = this._bodyData[i];
+      const drift = 0.15 * (1 + this._entropy * 0.5);
+      const pix = di.x + Math.sin(di.phase + t * 0.3) * drift;
+      const piy = di.y + Math.cos(di.phase * 0.7 + t * 0.2) * drift * 0.8;
+      const piz = di.z + Math.sin(di.phase * 1.3 + t * 0.25) * drift * 0.6;
+
+      for (let j = i + step; j < BODY_COUNT && lineCount < max; j += step) {
+        const dj = this._bodyData[j];
+        const pjx = dj.x + Math.sin(dj.phase + t * 0.3) * drift;
+        const pjy = dj.y + Math.cos(dj.phase * 0.7 + t * 0.2) * drift * 0.8;
+        const pjz = dj.z + Math.sin(dj.phase * 1.3 + t * 0.25) * drift * 0.6;
+
+        const dx = pix - pjx, dy = piy - pjy, dz = piz - pjz;
+        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (dist < maxDist) {
+          const idx = lineCount * 6;
+          positions[idx] = pix; positions[idx + 1] = piy; positions[idx + 2] = piz;
+          positions[idx + 3] = pjx; positions[idx + 4] = pjy; positions[idx + 5] = pjz;
+          lineCount++;
         }
       }
     }
 
-    // Finalize all pools
-    for (const pool of this._pools.values()) {
-      pool.mesh.count = pool.count;
-      pool.mesh.instanceMatrix.needsUpdate = true;
-      pool.sizeAttr.needsUpdate = true;
-      pool.opacityAttr.needsUpdate = true;
-      pool.emissiveAttr.needsUpdate = true;
-      pool.colorAttr.needsUpdate = true;
-    }
+    this._connectionGeom.attributes.position.needsUpdate = true;
+    this._connectionGeom.setDrawRange(0, lineCount * 2);
+    this._connectionLines.material.opacity = convergence * (0.08 + this._entropy * 0.12);
   }
 
-  /** Set global entropy level (drives shader uniforms). */
-  setEntropy(value) {
-    this._entropy = Math.max(0, Math.min(1, value));
-    this._uniforms.u_entropy.value = this._entropy;
+  // ── Eyes ────────────────────────────────────────────────────────────────
+
+  _buildEyes() {
+    const THREE = this._THREE;
+    const eyeConfig = {
+      xRadius: 0.22,
+      yRadius: 0.40,
+      leftPos: { x: -0.38, y: 0.55, z: 1.6 },
+      rightPos: { x: 0.38, y: 0.55, z: 1.6 },
+      portalScale: 1.7,
+      portalHeightScale: 0.4,
+    };
+    this._eyeConfig = eyeConfig;
+
+    // Each eye: portal (dark) + white ellipse
+    const ellipseShape = (xr, yr) => {
+      const shape = new THREE.Shape();
+      shape.ellipse(0, 0, xr, yr, 0, Math.PI * 2, false, 0);
+      return shape;
+    };
+
+    // Portal meshes (dark ellipses behind eyes)
+    const portalGeom = new THREE.ShapeGeometry(
+      ellipseShape(eyeConfig.xRadius * eyeConfig.portalScale, eyeConfig.yRadius * eyeConfig.portalHeightScale)
+    );
+    const portalMat = new THREE.MeshBasicMaterial({
+      color: 0x010108,
+      transparent: true,
+      opacity: 0.95,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+
+    this._leftPortal = new THREE.Mesh(portalGeom, portalMat.clone());
+    this._rightPortal = new THREE.Mesh(portalGeom, portalMat.clone());
+    this._leftPortal.position.set(eyeConfig.leftPos.x, eyeConfig.leftPos.y - 0.15, eyeConfig.leftPos.z - 0.02);
+    this._rightPortal.position.set(eyeConfig.rightPos.x, eyeConfig.rightPos.y + 0.15, eyeConfig.rightPos.z - 0.02);
+    this._eyeGroup.add(this._leftPortal);
+    this._eyeGroup.add(this._rightPortal);
+
+    // Eye white meshes (glowing ellipses)
+    const eyeGeom = new THREE.ShapeGeometry(ellipseShape(eyeConfig.xRadius, eyeConfig.yRadius));
+    const eyeMat = new THREE.MeshBasicMaterial({
+      color: 0xf8faff,
+      transparent: true,
+      opacity: 1.0,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+
+    this._leftEye = new THREE.Mesh(eyeGeom, eyeMat.clone());
+    this._rightEye = new THREE.Mesh(eyeGeom, eyeMat.clone());
+    this._leftEye.position.copy(new THREE.Vector3(eyeConfig.leftPos.x, eyeConfig.leftPos.y, eyeConfig.leftPos.z));
+    this._rightEye.position.copy(new THREE.Vector3(eyeConfig.rightPos.x, eyeConfig.rightPos.y, eyeConfig.rightPos.z));
+    this._eyeGroup.add(this._leftEye);
+    this._eyeGroup.add(this._rightEye);
+
+    // Eye outline rings (colored glow borders)
+    const magRgb = hexToNormalizedRgb(palette.magenta);
+    const cyanRgb = hexToNormalizedRgb(palette.cyan);
+
+    const ringGeom = (xr, yr) => {
+      const points = [];
+      for (let i = 0; i <= 64; i++) {
+        const a = (i / 64) * Math.PI * 2;
+        points.push(new THREE.Vector3(Math.cos(a) * xr, Math.sin(a) * yr, 0));
+      }
+      return new THREE.BufferGeometry().setFromPoints(points);
+    };
+
+    const leftRingMat = new THREE.LineBasicMaterial({
+      color: new THREE.Color(magRgb.r, magRgb.g, magRgb.b),
+      transparent: true, opacity: 0.8,
+    });
+    const rightRingMat = new THREE.LineBasicMaterial({
+      color: new THREE.Color(cyanRgb.r, cyanRgb.g, cyanRgb.b),
+      transparent: true, opacity: 0.8,
+    });
+
+    this._leftRing = new THREE.Line(ringGeom(eyeConfig.xRadius * 1.08, eyeConfig.yRadius * 1.08), leftRingMat);
+    this._rightRing = new THREE.Line(ringGeom(eyeConfig.xRadius * 1.08, eyeConfig.yRadius * 1.08), rightRingMat);
+    this._leftRing.position.copy(this._leftEye.position);
+    this._rightRing.position.copy(this._rightEye.position);
+    this._eyeGroup.add(this._leftRing);
+    this._eyeGroup.add(this._rightRing);
   }
+
+  _updateEyes() {
+    const t = performance.now() / 1000;
+
+    // Blink
+    if (!this._isBlinking && (t - this._lastBlinkTime) >= this._nextBlinkDelay) {
+      this._isBlinking = true;
+      this._blinkStartTime = t;
+      this._nextBlinkDelay = 3.5 + Math.random() * 2;
+    }
+
+    if (this._isBlinking) {
+      const elapsed = t - this._blinkStartTime;
+      const dur = 0.25;
+      if (elapsed < dur * 0.4) {
+        this._blinkScale = 1.0 - (elapsed / (dur * 0.4)) * 0.9;
+      } else if (elapsed < dur * 0.6) {
+        this._blinkScale = 0.1;
+      } else if (elapsed < dur) {
+        this._blinkScale = 0.1 + ((elapsed - dur * 0.6) / (dur * 0.4)) * 0.9;
+      } else {
+        this._isBlinking = false;
+        this._lastBlinkTime = t;
+        this._blinkScale = 1.0;
+      }
+    }
+
+    // Mouse tracking (smooth lerp)
+    const lerp = 0.06;
+    this._eyeCurrentX += (this._mouseX * 0.12 - this._eyeCurrentX) * lerp;
+    this._eyeCurrentY += (this._mouseY * 0.08 - this._eyeCurrentY) * lerp;
+
+    const cfg = this._eyeConfig;
+    const ox = this._eyeCurrentX;
+    const oy = this._eyeCurrentY;
+
+    // Apply blink as Y-scale and eye offset
+    const bs = this._blinkScale * this._eyeOpenProgress;
+
+    this._leftEye.scale.set(1, bs, 1);
+    this._rightEye.scale.set(1, bs, 1);
+    this._leftRing.scale.set(1, bs, 1);
+    this._rightRing.scale.set(1, bs, 1);
+
+    this._leftEye.position.set(cfg.leftPos.x + ox, cfg.leftPos.y + oy, cfg.leftPos.z);
+    this._rightEye.position.set(cfg.rightPos.x + ox, cfg.rightPos.y + oy, cfg.rightPos.z);
+    this._leftRing.position.copy(this._leftEye.position);
+    this._rightRing.position.copy(this._rightEye.position);
+
+    // Eyes always face camera
+    this._leftEye.quaternion.copy(this._camera.quaternion);
+    this._rightEye.quaternion.copy(this._camera.quaternion);
+    this._leftRing.quaternion.copy(this._camera.quaternion);
+    this._rightRing.quaternion.copy(this._camera.quaternion);
+    this._leftPortal.quaternion.copy(this._camera.quaternion);
+    this._rightPortal.quaternion.copy(this._camera.quaternion);
+
+    this._leftPortal.position.set(cfg.leftPos.x + ox, cfg.leftPos.y - 0.15 + oy, cfg.leftPos.z - 0.02);
+    this._rightPortal.position.set(cfg.rightPos.x + ox, cfg.rightPos.y + 0.15 + oy, cfg.rightPos.z - 0.02);
+  }
+
+  // ── Portals (swirling arcs) ─────────────────────────────────────────────
+
+  _buildPortals() {
+    const THREE = this._THREE;
+    const magRgb = hexToNormalizedRgb(palette.magenta);
+    const cyanRgb = hexToNormalizedRgb(palette.cyan);
+
+    // Left portal arc (magenta)
+    this._leftPortalArc = this._createPortalArc(
+      new THREE.Color(magRgb.r, magRgb.g, magRgb.b),
+      { x: -0.38, y: 0.40, z: 1.55 },
+      0.45, 0.16
+    );
+    this._portalGroup.add(this._leftPortalArc.line);
+
+    // Right portal arc (cyan)
+    this._rightPortalArc = this._createPortalArc(
+      new THREE.Color(cyanRgb.r, cyanRgb.g, cyanRgb.b),
+      { x: 0.38, y: 0.70, z: 1.55 },
+      0.45, 0.16
+    );
+    this._portalGroup.add(this._rightPortalArc.line);
+  }
+
+  _createPortalArc(color, center, xr, yr) {
+    const THREE = this._THREE;
+    const segments = 80;
+    const positions = new Float32Array((segments + 1) * 3);
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+    const mat = new THREE.LineBasicMaterial({
+      color,
+      transparent: true,
+      opacity: 0.9,
+      depthWrite: false,
+    });
+
+    const line = new THREE.Line(geom, mat);
+    return { line, positions, segments, center, xr, yr, progress: 0 };
+  }
+
+  _updatePortals(portalProgress) {
+    const update = (arc, progress) => {
+      const pts = arc.segments;
+      const drawn = Math.floor(progress * pts);
+      for (let i = 0; i <= pts; i++) {
+        const a = (i / pts) * Math.PI * 2;
+        if (i <= drawn) {
+          arc.positions[i * 3] = arc.center.x + Math.cos(a) * arc.xr;
+          arc.positions[i * 3 + 1] = arc.center.y + Math.sin(a) * arc.yr;
+          arc.positions[i * 3 + 2] = arc.center.z;
+        } else {
+          // Hide undrawn segments at same point
+          arc.positions[i * 3] = arc.positions[drawn * 3] || arc.center.x;
+          arc.positions[i * 3 + 1] = arc.positions[drawn * 3 + 1] || arc.center.y;
+          arc.positions[i * 3 + 2] = arc.center.z;
+        }
+      }
+      arc.line.geometry.attributes.position.needsUpdate = true;
+      arc.line.material.opacity = Math.min(1, progress * 2) * 0.85;
+      arc.line.quaternion.copy(this._camera.quaternion);
+    };
+
+    update(this._leftPortalArc, portalProgress);
+    update(this._rightPortalArc, Math.max(0, portalProgress - 0.08) * 1.09);
+  }
+
+  // ── Boot animation ──────────────────────────────────────────────────────
+
+  triggerBoot() {
+    this._inBoot = true;
+    this._bootSeq.reset();
+    this._eyeOpenProgress = 0;
+    this._lastBlinkTime = performance.now() / 1000;
+  }
+
+  // ── Main loop ───────────────────────────────────────────────────────────
 
   _startLoop() {
     const animate = () => {
-      this._time += 0.016 * this._shader.animationSpeed;
-      this._uniforms.u_time.value = this._time;
+      this._time += 0.016;
 
-      // Gentle camera orbit
-      const elapsed = performance.now() * 0.00008;
-      this._camera.position.x = Math.cos(elapsed) * 300;
-      this._camera.position.z = Math.sin(elapsed) * 300;
-      this._camera.lookAt(0, 0, 0);
+      // Boot timeline
+      if (this._inBoot) {
+        this._bootSeq.step();
+        if (!this._bootSeq.isActive()) this._inBoot = false;
+      }
+
+      const convergence = this._inBoot ? this._bootSeq.getConvergenceProgress() : 1;
+      const portalProgress = this._inBoot ? this._bootSeq.getPortalProgress() : 1;
+      const eyesProgress = this._inBoot ? this._bootSeq.getEyesProgress() : 1;
+
+      // Eye open progress during boot
+      if (this._inBoot) {
+        this._eyeOpenProgress = this._bootSeq.getEyeOpenProgress();
+      } else {
+        this._eyeOpenProgress = 1.0;
+      }
+
+      // Visibility during boot
+      const showPortals = !this._inBoot || this._bootSeq.timeline > this._bootSeq.T_PORTALS_START;
+      const showEyes = !this._inBoot || this._bootSeq.timeline > this._bootSeq.T_EYES_START;
+
+      this._portalGroup.visible = showPortals;
+      this._eyeGroup.visible = showEyes;
+
+      if (showEyes) {
+        this._eyeGroup.children.forEach(c => {
+          if (c.material) c.material.opacity = eyesProgress;
+        });
+      }
+
+      // Update systems
+      this._updateCamera();
+      this._updateParticleMatrices(convergence);
+      this._updateConnections(convergence);
+      if (showPortals) this._updatePortals(portalProgress);
+      if (showEyes) this._updateEyes();
 
       this._renderer.render(this._scene, this._camera);
       this._updateMetrics();
@@ -279,6 +672,18 @@ export class ThreeJsBackend extends Renderer {
     }
   }
 
+  // ── Public API ──────────────────────────────────────────────────────────
+
+  setEntropy(value) {
+    this._entropy = Math.max(0, Math.min(1, value));
+  }
+
+  setEntityState(state) {
+    this._state = state;
+  }
+
+  render() {}
+
   resize() {
     const w = this._canvas.clientWidth;
     const h = this._canvas.clientHeight;
@@ -288,29 +693,24 @@ export class ThreeJsBackend extends Renderer {
     this._renderer.setSize(w, h);
   }
 
+  pause() {
+    if (this._rafId) { cancelAnimationFrame(this._rafId); this._rafId = null; }
+  }
+
+  resume() {
+    if (!this._rafId) this._startLoop();
+  }
+
   dispose() {
-    if (this._rafId) {
-      cancelAnimationFrame(this._rafId);
-      this._rafId = null;
-    }
-    for (const pool of this._pools.values()) {
-      pool.mesh.geometry.dispose();
-    }
-    this._flatMaterial.dispose();
-    this._emissiveMaterial.dispose();
-    this._geometryCache.forEach(g => g.dispose());
+    if (this._rafId) { cancelAnimationFrame(this._rafId); this._rafId = null; }
     this._renderer.dispose();
   }
 
   getPerformanceMetrics() {
-    let totalEntities = 0;
-    for (const pool of this._pools.values()) totalEntities += pool.count;
     return {
       fps: this._fps,
-      frameTime: 1000 / this._fps,
-      entityCount: totalEntities,
-      drawCalls: this._pools.size,
-      pools: this._pools.size,
+      entityCount: BODY_COUNT + AURA_COUNT,
+      pools: 2,
     };
   }
 }

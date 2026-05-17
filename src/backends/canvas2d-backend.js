@@ -56,6 +56,7 @@ export class Canvas2dBackend extends Renderer {
     this._t           = 0;
     this._rafId       = null;
     this._state       = 'idle';
+    this._entropy     = 0.3;
     this._readyCalled = false;
 
     // Boot timeline
@@ -228,7 +229,7 @@ export class Canvas2dBackend extends Renderer {
       this._holdUntil = this._t + hd; this._nextSaccade = this._holdUntil + gd;
     }
 
-    if (this._joltDecay > 0.01) { this._joltDecay *= 0.88; } else { this._joltX = 0; this._joltY = 0; this._joltDecay = 0; }
+    if (this._joltDecay > 0.01) { this._joltDecay *= 0.94; } else { this._joltX = 0; this._joltY = 0; this._joltDecay = 0; }
     if (this._snapDecay > 0.01) { this._snapDecay *= 0.92; } else { this._snapX = 0; this._snapY = 0; this._snapDecay = 0; }
 
     if (this._t > this._nextDistraction) {
@@ -261,8 +262,8 @@ export class Canvas2dBackend extends Renderer {
       rawX = Math.cos(ang) * MAX_OFF * str * 0.48 + this._saccadeX * MAX_OFF * 0.42 + d1x + trX + this._distractCurX * 0.9 + this._snapX * this._snapDecay;
       rawY = Math.sin(ang) * MAX_OFF * 0.65 * str * 0.48 + this._saccadeY * MAX_OFF * 0.65 * 0.42 + d1y + trY + this._distractCurY * 0.9 + this._snapY * this._snapDecay;
     } else {
-      rawX = this._saccadeX * MAX_OFF + d1x + trX + this._distractCurX + this._snapX * this._snapDecay + this._joltX * MAX_OFF * this._joltDecay;
-      rawY = this._saccadeY * MAX_OFF * 0.65 + d1y + trY + this._distractCurY + this._snapY * this._snapDecay + this._joltY * MAX_OFF * 0.65 * this._joltDecay;
+      rawX = this._saccadeX * MAX_OFF + d1x + trX + this._distractCurX + this._snapX * this._snapDecay + this._joltX * MAX_OFF * 2.5 * this._joltDecay;
+      rawY = this._saccadeY * MAX_OFF * 0.65 + d1y + trY + this._distractCurY + this._snapY * this._snapDecay + this._joltY * MAX_OFF * 1.6 * this._joltDecay;
     }
     this._eyeTargetX = rawX; this._eyeTargetY = rawY;
 
@@ -339,11 +340,12 @@ export class Canvas2dBackend extends Renderer {
         p.x += (p.tx - p.x) * (p.cs * (1 - settleBlend) * 0.3) + Math.sin(p.phase * 0.7 + this._t * 0.003) * sd * 0.5;
         p.y += (p.ty - p.y) * (p.cs * (1 - settleBlend) * 0.3) + Math.cos(p.phase * 0.9 + this._t * 0.002) * sd * 0.35;
       }
-      p.phase += p.speed * (0.7 + settleBlend * 0.5);
+      const eMul = 1 + this._entropy * 2.5;
+      p.phase += p.speed * (0.7 + settleBlend * 0.5) * eMul;
 
-      const driftAmt = 0.6 + settleBlend * 2.4;
-      const driftX   = Math.sin(p.phase + this._t * 0.008) * driftAmt;
-      const driftY   = Math.cos(p.phase * 0.72 + this._t * 0.006) * driftAmt * 0.8;
+      const driftAmt = (0.6 + settleBlend * 2.4) * eMul;
+      const driftX   = Math.sin(p.phase + this._t * 0.008 * eMul) * driftAmt;
+      const driftY   = Math.cos(p.phase * 0.72 + this._t * 0.006 * eMul) * driftAmt * 0.8;
       const dx = p.x + driftX - this._cx, dy = p.y + driftY - this._cy;
       const d  = Math.sqrt(dx * dx + dy * dy);
       const falloff = Math.max(0, 1 - d / FALLOFF_RADIUS);
@@ -352,17 +354,19 @@ export class Canvas2dBackend extends Renderer {
       const a       = p.alpha * falloff * pulse * vis;
 
       ctx.shadowColor = p.color;
+      const eGlow = 1 + this._entropy * 1.5;
       ctx.shadowBlur  = p.glow
-        ? (20 + settleBlend * 14 + 7 * Math.sin(p.phase + this._t * 0.02)) * this._opts.glowScale
-        : settleBlend * 4 * this._opts.glowScale;
+        ? (20 + settleBlend * 14 + 7 * Math.sin(p.phase + this._t * 0.02)) * this._opts.glowScale * eGlow
+        : settleBlend * 4 * this._opts.glowScale * eGlow;
       ctx.beginPath(); ctx.arc(p.x + driftX, p.y + driftY, p.r, 0, Math.PI * 2);
       ctx.fillStyle = p.color; ctx.globalAlpha = a; ctx.fill();
       ctx.shadowBlur = 0; ctx.globalAlpha = 1;
     }
 
-    // ── Connection lines
-    if (settleBlend > 0) {
-      const connAlpha = settleBlend * 0.13, connDist = 62 + settleBlend * 20;
+    // ── Connection lines (visible during boot convergence too)
+    const connProgress = this._inBoot ? Math.max(convProg * 0.5, settleBlend) : 1;
+    if (connProgress > 0.05) {
+      const connAlpha = connProgress * (0.13 + this._entropy * 0.22), connDist = (35 + connProgress * 47) * (1 + this._entropy);
       for (let i = 0; i < this._particles.length; i += 2) {
         const pi  = this._particles[i];
         const dxi = Math.sin(pi.phase + this._t * 0.008) * (0.6 + settleBlend * 2.4);
@@ -533,12 +537,24 @@ export class Canvas2dBackend extends Renderer {
     }
   }
 
+  setEntropy(val) {
+    this._entropy = Math.max(0, Math.min(1, val));
+  }
+
   triggerBoot() { this._startBoot(); }
 
   injectEyeJolt(dx, dy) {
     this._joltX = Math.max(-1, Math.min(1, dx));
     this._joltY = Math.max(-1, Math.min(1, dy));
     this._joltDecay = 1.0;
+  }
+
+  pause() {
+    if (this._rafId) { cancelAnimationFrame(this._rafId); this._rafId = null; }
+  }
+
+  resume() {
+    if (!this._rafId) this._start();
   }
 
   resize() { this._preserveParticlesOnResize(); }
