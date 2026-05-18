@@ -87,8 +87,10 @@ export class ParticleSystem {
     }
   }
 
-  // draw() — canvas rendering, can be deferred by FrameBudget
-  draw(ctx, t, state) {
+  // draw() — canvas rendering, always called every frame (no skip = no flicker).
+  // allowGlow: when false, shadowBlur is skipped — particles draw flat.
+  // Dropping glow cuts draw time by ~50-60% with no visible pop.
+  draw(ctx, t, state, allowGlow = true) {
     const { inBoot, convProg, settleBlend, entropy, effectiveGlow } = state;
 
     for (const p of this._particles) {
@@ -99,7 +101,7 @@ export class ParticleSystem {
       const vis     = inBoot ? Math.min(1, convProg * 3) : 1;
       const a       = p.alpha * falloff * pulse * vis;
 
-      const useBlur = p.glow && effectiveGlow > 0.05;
+      const useBlur = allowGlow && p.glow && effectiveGlow > 0.05;
       if (useBlur) {
         ctx.shadowColor = p.color;
         const eGlow = 1 + entropy * 1.5;

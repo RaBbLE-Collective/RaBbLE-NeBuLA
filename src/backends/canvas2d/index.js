@@ -198,14 +198,13 @@ export class Canvas2dBackend extends Renderer {
     budget.beginFrame();
     let t0;
 
-    // Particles — budgeted, 20fps floor (max 2 consecutive skips)
-    if (budget.canDraw('particles', 2)) {
-      t0 = performance.now();
-      this._particleSystem.draw(ctx, this._t, state);
-      budget.record('particles', performance.now() - t0);
-    }
+    // Particles — always draw every frame (no skip = no flicker).
+    // When over budget, shadowBlur is dropped instead (flat particles, no pop).
+    t0 = performance.now();
+    this._particleSystem.draw(ctx, this._t, state, budget.canGlow());
+    budget.record('particles', performance.now() - t0);
 
-    // Connections — budgeted, no floor (can drop entirely under severe load)
+    // Connections — binary skip under load (thin lines, acceptable to drop).
     if (state.hasBooted && budget.canDraw('connections')) {
       t0 = performance.now();
       this._connectionSystem.draw(ctx, this._t, state, this._particleSystem.particles);
