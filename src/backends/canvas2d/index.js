@@ -191,16 +191,37 @@ export class Canvas2dBackend extends Renderer {
       ctx.fillRect(0, 0, this._canvas.width / this._dpr, this._canvas.height / this._dpr);
     }
 
-    // Priority order: particles → connections → portals → eyes
-    this._particleSystem.draw(ctx, this._t, state);
+    // Reserve budget for always-draw systems (eyes + portals), then budget the rest.
+    // Draw order is back-to-front (particles → connections → portals → eyes).
+    // Priority under load: eyes (always) > portals (always) > connections > particles.
+    const budget = this._budget;
+    budget.beginFrame();
+    let t0;
 
-    if (state.hasBooted) {
-      this._connectionSystem.draw(ctx, this._t, state, this._particleSystem.particles);
+    // Particles — budgeted, 20fps floor (max 2 consecutive skips)
+    if (budget.canDraw('particles', 2)) {
+      t0 = performance.now();
+      this._particleSystem.draw(ctx, this._t, state);
+      budget.record('particles', performance.now() - t0);
     }
 
-    this._portalSystem.draw(ctx, this._t, state);
+    // Connections — budgeted, no floor (can drop entirely under severe load)
+    if (state.hasBooted && budget.canDraw('connections')) {
+      t0 = performance.now();
+      this._connectionSystem.draw(ctx, this._t, state, this._particleSystem.particles);
+      budget.record('connections', performance.now() - t0);
+    }
 
+    // Portals — always draw, measure cost for next-frame budget reservation
+    t0 = performance.now();
+    this._portalSystem.draw(ctx, this._t, state);
+    budget.record('portals', performance.now() - t0);
+
+    // Eyes — always draw (highest priority), measure cost
+    t0 = performance.now();
     const eyeAlpha = this._eyeSystem.draw(ctx, this._t, state);
+    budget.record('eyes', performance.now() - t0);
+
     if (eyeAlpha !== null && !this._readyCalled && eyeAlpha > 0.95) {
       this._readyCalled = true;
       if (typeof this._opts.onReady === 'function') this._opts.onReady();
@@ -249,6 +270,7 @@ export class Canvas2dBackend extends Renderer {
       links:        this._connectionSystem.links.length,
       adaptiveGlow: this._adaptiveGlow,
       entityState:  this._eyeSystem._entityState,
+      budget:       this._budget.metrics,
       backend:      'Canvas2D',
     };
   }
