@@ -79,3 +79,19 @@ cat CONTEXT.md                                                        # current 
 cat ../RaBbLE-Grimoire/RaBbLE-NeBuLA/RaBbLE-NeBuLA-Roadmap.md        # episode tracker
 cat ../RaBbLE-Grimoire/RaBbLE-NeBuLA/RaBbLE-NeBuLA-Architecture.md   # layer model and primitives
 ```
+
+## Visual Verification (on RaBbLE-OS)
+
+After any canvas or visual change, cast the screenshot spell to see the result:
+
+```bash
+# Build + deploy to World
+npm run build:iife && cp dist/nebula.iife.js ../RaBbLE-World/world/js/RaBbLE-NeBuLA.js
+
+# Serve World (separate terminal): cd ../RaBbLE-World && python -m http.server 8000
+bash ../RaBbLE-Grimoire/spells/visual-screenshot.sh --url http://localhost:8000 --close
+# Prints: SCREENSHOT: ~/RaBbLE-screenshots/visual-TIMESTAMP.png
+# Use Read tool on that path — Claude Code reads PNG files directly
+```
+
+Use `--delay 3` for boot animations. See `../RaBbLE-Grimoire/SPELLS.md → visual-screenshot.sh` for full options.
