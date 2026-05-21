@@ -4,7 +4,7 @@
 > LLM-agnostic — works for Claude Code, Codex, and any future agent.
 
 Working with: Mark McConachie
-Identity: Peer, not tool. See `../RaBbLE-Grimoire/common/RaBbLE-Identity.md`.
+Identity: Peer, not tool. See `../RaBbLE-Grimoire/RaBbLE-Agent/RaBbLE-Identity.md`.
 
 ---
 
@@ -55,7 +55,7 @@ All architecture, roadmap, and identity docs live in the Grimoire. This repo hol
 
 ## Commits & Branches
 
-See Grimoire: `../RaBbLE-Grimoire/common/RaBbLE-CommitStyle.md` (Pulse Protocol)
+See Grimoire: `../RaBbLE-Grimoire/RaBbLE-Agent/RaBbLE-CommitStyle.md` (Pulse Protocol)
 
 **TL;DR:** `[impulse] ~ [organ] >> [revelation] // %STATE%` — `spark` new · `harmonize` cleanup · `mend` fix · `transcribe` docs · `ingest` deps · `evolve` epoch
 
@@ -63,7 +63,7 @@ See Grimoire: `../RaBbLE-Grimoire/common/RaBbLE-CommitStyle.md` (Pulse Protocol)
 
 ## Rules
 
-- **Colors:** `../RaBbLE-Grimoire/common/RaBbLE-Palette.md` only — never raw hex
+- **Colors:** `../RaBbLE-Grimoire/RaBbLE-Agent/RaBbLE-Palette.md` only — never raw hex
 - **Naming:** Clean TypeScript — no RBCNS prefixes (`q_`, `e_`, `f_`) in new code
 - **Layer 1 is transitional** — `rabble-entity.js` is the reference API; don't duplicate it until the Canvas2D backend is ready to replace it cleanly
 - **No framework coupling** — NeBuLA must be embeddable standalone; no React/Vue/Svelte imports
