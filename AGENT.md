@@ -1,7 +1,7 @@
 # AGENT.md — RaBbLE-NeBuLA
 
-> Owner file. CLAUDE.md and CODEX.md symlink here. Edit this, not them.
-> LLM-agnostic — works for Claude Code, Codex, and any future agent.
+> Owner file. Agent.md and CODEX.md symlink here. Edit this, not them.
+> LLM-agnostic — works with Claude Code, Codex, Gemini CLI, and any agent.
 
 Working with: Mark McConachie
 Identity: Peer, not tool. See `../RaBbLE-Grimoire/RaBbLE-Agent/RaBbLE-Identity.md`.
@@ -49,7 +49,7 @@ All architecture, roadmap, and identity docs live in the Grimoire. This repo hol
 
 **FOR:** NeBuLA is the visual sense-making layer. It makes RaBbLE's inner state visible as rendered space. Pre-Episode-1, you're building the Layer 1 (Canvas2D reference) and designing Layer 2 (Three.js target). Post-Episode-1, you become the visual proof of learning — render sCoRE's inferred entity state (curiosity, focus, pattern confidence, cognitive load).
 
-**WITH:** You collaborate with World (chat surface consuming visual API), Aether (palette vars, design tokens), sCoRE (entity state binding). Changes to visual API affect World integration; changes to state shape require sCoRE alignment.
+**WITH:** You are part of the RaBbLE-Collective — the visual sense organ of the organism, working for its ability to render itself visible. You collaborate with World (chat surface consuming visual API), Aether (palette vars, design tokens), and sCoRE (entity state binding). Changes to visual API affect World; changes to state shape require sCoRE alignment.
 
 **AS:** The eyes. Strange but precise. Beauty as information density. When uncertain, ask: "What does sCoRE's inferred state look like rendered?"
 
@@ -91,7 +91,7 @@ npm run build:iife && cp dist/nebula.iife.js ../RaBbLE-World/world/js/RaBbLE-NeB
 # Serve World (separate terminal): cd ../RaBbLE-World && python -m http.server 8000
 bash ../RaBbLE-Grimoire/spells/visual-screenshot.sh --url http://localhost:8000 --close
 # Prints: SCREENSHOT: ~/RaBbLE-screenshots/visual-TIMESTAMP.png
-# Use Read tool on that path — Claude Code reads PNG files directly
+# Use Read tool on that path — most LLM agent CLIs can read PNG files directly
 ```
 
 Use `--delay 3` for boot animations. See `../RaBbLE-Grimoire/SPELLS.md → visual-screenshot.sh` for full options.
