@@ -1,8 +1,10 @@
 import { palette } from '../../puppet/palette.js';
 
-// Layout constants shared with PortalSystem
-export const EYE_W = 30, EYE_H = 56, EYE_GAP = 36, BASE_Y_OFFSET = -6;
-export const PORTAL_W = 62, PORTAL_H = 19, MAX_OFF = 13;
+// Layout constants shared with PortalSystem — proportions matched to RaBbLE4K.png
+// reference (eye W:H:gap ≈ 121:445:257 → tall narrow ovals close together; portals
+// are equal-size flattened ellipses, cyan above the left eye, magenta below the right)
+export const EYE_W = 38, EYE_H = 110, EYE_GAP = 36, BASE_Y_OFFSET = -6;
+export const PORTAL_W = 90, PORTAL_H = 28, MAX_OFF = 13;
 
 const MOUSE_NEAR_DIST = 600;
 
@@ -219,7 +221,8 @@ export class EyeSystem {
     const eW2   = EYE_W / 2,    eH2 = EYE_H / 2;
     const baseY = this._cy + BASE_Y_OFFSET;
     const lx    = this._cx - EYE_GAP, rx = this._cx + EYE_GAP;
-    const lpY   = baseY + EYE_H * 0.44, rpY = baseY - EYE_H * 0.44;
+    // Reference portrait: cyan (left) eye's portal sits above it, magenta (right) eye's below
+    const lpY   = baseY - EYE_H * 0.44, rpY = baseY + EYE_H * 0.44;
     const maxIrisX = Math.max(0, pW2 - eW2 * 0.55);
     const maxIrisY = Math.max(0, pH2 - 4);
 
@@ -238,8 +241,8 @@ export class EyeSystem {
     const rOrbY = rpY + (baseY + rC.y * 0.5 * eb - rpY) * eb;
 
     ctx.globalAlpha = alpha;
-    this._drawOrb(ctx, t, lOrbX, lOrbY, blinkScale, palette.magenta, lx, lpY, emergeScale, pW2, pH2, eW2, eH2);
-    this._drawOrb(ctx, t, rOrbX, rOrbY, blinkScale, palette.cyan,    rx, rpY, emergeScale, pW2, pH2, eW2, eH2);
+    this._drawOrb(ctx, t, lOrbX, lOrbY, blinkScale, palette.cyan,    lx, lpY, emergeScale, pW2, pH2, eW2, eH2);
+    this._drawOrb(ctx, t, rOrbX, rOrbY, blinkScale, palette.magenta, rx, rpY, emergeScale, pW2, pH2, eW2, eH2);
     ctx.globalAlpha = 1;
   }
 
@@ -262,7 +265,7 @@ export class EyeSystem {
     ctx.fillStyle = '#f8faff';
     ctx.shadowColor = 'rgba(220,235,255,0.85)'; ctx.shadowBlur = 22 * this._glowScale;
     ctx.fill(); ctx.shadowBlur = 0;
-    ctx.strokeStyle = col; ctx.lineWidth = 2;
+    ctx.strokeStyle = col; ctx.lineWidth = 3;
     ctx.shadowColor = col; ctx.shadowBlur = (18 + 10 * Math.sin(t * 0.028)) * this._glowScale;
     ctx.stroke(); ctx.shadowBlur = 0;
     ctx.restore();

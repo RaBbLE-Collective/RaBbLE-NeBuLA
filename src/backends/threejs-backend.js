@@ -391,13 +391,16 @@ export class ThreeJsBackend extends Renderer {
 
   _buildEyes() {
     const THREE = this._THREE;
+    // Proportions matched to RaBbLE4K.png reference (eye W:H ≈ 121:445 — tall
+    // narrow ovals; portals are equal-size flattened ellipses, cyan above the
+    // left eye, magenta below the right)
     const eyeConfig = {
-      xRadius: 0.22,
-      yRadius: 0.40,
+      xRadius: 0.18,
+      yRadius: 0.52,
       leftPos: { x: -0.38, y: 0.55, z: 1.6 },
       rightPos: { x: 0.38, y: 0.55, z: 1.6 },
-      portalScale: 1.7,
-      portalHeightScale: 0.4,
+      portalScale: 2.1,
+      portalHeightScale: 0.5,
     };
     this._eyeConfig = eyeConfig;
 
@@ -408,7 +411,7 @@ export class ThreeJsBackend extends Renderer {
       return shape;
     };
 
-    // Portal meshes (dark ellipses behind eyes)
+    // Portal meshes (dark ellipses behind eyes) — equal size both sides
     const portalGeom = new THREE.ShapeGeometry(
       ellipseShape(eyeConfig.xRadius * eyeConfig.portalScale, eyeConfig.yRadius * eyeConfig.portalHeightScale)
     );
@@ -422,8 +425,9 @@ export class ThreeJsBackend extends Renderer {
 
     this._leftPortal = new THREE.Mesh(portalGeom, portalMat.clone());
     this._rightPortal = new THREE.Mesh(portalGeom, portalMat.clone());
-    this._leftPortal.position.set(eyeConfig.leftPos.x, eyeConfig.leftPos.y - 0.15, eyeConfig.leftPos.z - 0.02);
-    this._rightPortal.position.set(eyeConfig.rightPos.x, eyeConfig.rightPos.y + 0.15, eyeConfig.rightPos.z - 0.02);
+    // Reference portrait: cyan (left) eye's portal sits above it, magenta (right) eye's below
+    this._leftPortal.position.set(eyeConfig.leftPos.x, eyeConfig.leftPos.y + 0.15, eyeConfig.leftPos.z - 0.02);
+    this._rightPortal.position.set(eyeConfig.rightPos.x, eyeConfig.rightPos.y - 0.15, eyeConfig.rightPos.z - 0.02);
     this._eyeGroup.add(this._leftPortal);
     this._eyeGroup.add(this._rightPortal);
 
@@ -457,13 +461,14 @@ export class ThreeJsBackend extends Renderer {
       return new THREE.BufferGeometry().setFromPoints(points);
     };
 
+    // Reference portrait: cyan rings the left eye, magenta the right
     const leftRingMat = new THREE.LineBasicMaterial({
-      color: new THREE.Color(magRgb.r, magRgb.g, magRgb.b),
-      transparent: true, opacity: 0.8,
+      color: new THREE.Color(cyanRgb.r, cyanRgb.g, cyanRgb.b),
+      transparent: true, opacity: 0.8, linewidth: 2,
     });
     const rightRingMat = new THREE.LineBasicMaterial({
-      color: new THREE.Color(cyanRgb.r, cyanRgb.g, cyanRgb.b),
-      transparent: true, opacity: 0.8,
+      color: new THREE.Color(magRgb.r, magRgb.g, magRgb.b),
+      transparent: true, opacity: 0.8, linewidth: 2,
     });
 
     this._leftRing = new THREE.Line(ringGeom(eyeConfig.xRadius * 1.08, eyeConfig.yRadius * 1.08), leftRingMat);

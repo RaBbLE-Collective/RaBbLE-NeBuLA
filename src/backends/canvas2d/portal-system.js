@@ -25,10 +25,11 @@ export class PortalSystem {
     const pW2   = PORTAL_W / 2, pH2 = PORTAL_H / 2;
     const lx    = this._cx - EYE_GAP, rx = this._cx + EYE_GAP;
     const baseY = this._cy + BASE_Y_OFFSET;
-    const lpY   = baseY + EYE_H * 0.44, rpY = baseY - EYE_H * 0.44;
+    // Reference portrait: cyan (left) eye's portal sits above it, magenta (right) eye's below
+    const lpY   = baseY - EYE_H * 0.44, rpY = baseY + EYE_H * 0.44;
     const p     = easeInOut(drawProgress);
-    this._drawPortalArc(ctx, t, lx, lpY, palette.magenta, pW2, pH2, clamp01(p * 1.15));
-    this._drawPortalArc(ctx, t, rx, rpY, palette.cyan,    pW2, pH2, clamp01((p - 0.08) * 1.15));
+    this._drawPortalArc(ctx, t, lx, lpY, palette.cyan,    pW2, pH2, clamp01(p * 1.15));
+    this._drawPortalArc(ctx, t, rx, rpY, palette.magenta, pW2, pH2, clamp01((p - 0.08) * 1.15));
   }
 
   _drawPortalArc(ctx, t, px, py, col, pW2, pH2, frac) {
