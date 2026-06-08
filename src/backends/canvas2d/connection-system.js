@@ -1,7 +1,13 @@
-// Connection tuning — 95px accounts for ±30px sinusoidal drift on each particle
-const CONN_DIST_POST_BOOT   = 95;
+// Connection tuning
 const MAX_DRAWN_CONNECTIONS = 200;
-const MAX_PRECOMPUTED_LINKS = 200;
+
+// Post-boot topology — sparse "neural" web rather than dense radius-clustering.
+// Each particle links to its K nearest neighbors (by stable target position),
+// producing an organic synapse-like graph that stays sparse regardless of
+// local particle density — the "living brain" feel at a fraction of the link
+// count (and draw cost) of the old radius-capped approach.
+const NEAREST_NEIGHBORS     = 2;
+const MAX_PRECOMPUTED_LINKS = 320;
 
 // Spatial hash constants for boot connection loop
 const HASH_CELL_SIZE        = 100;   // slightly larger than max boot connDist (82px)
@@ -37,15 +43,37 @@ export class ConnectionSystem {
   get links() { return this._links; }
 
   // Rebuild pre-computed link topology from particle target positions.
-  // Called after init and after resize. O(n²) but happens once, not per-frame.
+  // Called after init and after resize — O(n² log n) but happens once, not
+  // per-frame, and n is small (≤300) so this is sub-millisecond.
+  //
+  // Each particle finds its K nearest neighbors by target position (stable
+  // across frames — no per-frame recompute needed) and links to them, with
+  // duplicate pairs (i links j, j also nearest to i) collapsed. The result
+  // is a sparse, evenly-distributed synapse graph — "living brain" rather
+  // than a dense mesh that clumps wherever particles happen to cluster.
   rebuild(particles) {
+    const n = particles.length;
+    const seen  = new Set();
     const links = [];
-    const dist2 = CONN_DIST_POST_BOOT * CONN_DIST_POST_BOOT;
-    for (let i = 0; i < particles.length && links.length < MAX_PRECOMPUTED_LINKS; i++) {
-      for (let j = i + 1; j < particles.length && links.length < MAX_PRECOMPUTED_LINKS; j++) {
+
+    for (let i = 0; i < n; i++) {
+      const dists = [];
+      for (let j = 0; j < n; j++) {
+        if (j === i) continue;
         const dx = particles[i].tx - particles[j].tx;
         const dy = particles[i].ty - particles[j].ty;
-        if (dx * dx + dy * dy < dist2) links.push({ a: i, b: j });
+        dists.push([dx * dx + dy * dy, j]);
+      }
+      dists.sort((a, b) => a[0] - b[0]);
+
+      for (let k = 0; k < NEAREST_NEIGHBORS && k < dists.length; k++) {
+        const j = dists[k][1];
+        const a = Math.min(i, j), b = Math.max(i, j);
+        const key = a * n + b;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        links.push({ a, b });
+        if (links.length >= MAX_PRECOMPUTED_LINKS) { this._links = links; return; }
       }
     }
     this._links = links;

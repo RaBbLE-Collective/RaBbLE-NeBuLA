@@ -10,7 +10,7 @@
  *
  * HTML attributes:
  *   mode           'idle'|'boot'   default: 'idle'
- *   particle-count  number         default: 480
+ *   particle-count  number         default: 260 (capped centrally at 300, 160 on mobile)
  *   overscan        number         default: 2.35  (capped for mobile/small)
  *   interactive     bool           default: true
  *   show-waveform   bool           default: false
@@ -94,8 +94,12 @@ class RaBbLEEntityElement extends HTMLElement {
     this._resize();
     requestAnimationFrame(this._resize);
 
-    const requested     = parseInt(this.getAttribute('particle-count') || '480', 10);
-    const particleCount = isMobile ? Math.min(220, requested) : requested;
+    // NeBuLA owns particle-system performance — cap centrally so any host
+    // page's request lands in the "living brain" range (sparse field, fluid
+    // motion) rather than the old dense-nebula range that bogged down the
+    // shared GPU/CPU budget. 260 default, 300 hard ceiling, lower on mobile.
+    const requested     = parseInt(this.getAttribute('particle-count') || '260', 10);
+    const particleCount = Math.min(isMobile ? 160 : 300, requested);
 
     this._backend = new Canvas2dBackend(this._canvas, {
       fieldCanvas:   this._fieldCanvas,
