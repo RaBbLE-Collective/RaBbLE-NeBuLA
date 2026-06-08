@@ -55,7 +55,6 @@ export class EyeSystem {
 
   setEntityState(state) { this._entityState = state; }
 
-  // Reset blink state for boot sequence entry
   initBoot() {
     this._blinkMachine    = 0;
     this._blinkPhase      = 0;
@@ -96,7 +95,6 @@ export class EyeSystem {
     if (this._onClick)     window.removeEventListener('click',     this._onClick);
   }
 
-  // update() — saccade + blink FSM, always runs every frame
   update(t, state) {
     this._updateEyeTarget(t);
     this._updateBlinkMachine(t, state);
@@ -201,8 +199,9 @@ export class EyeSystem {
   }
 
   // draw() — always runs (eyes are highest priority system).
+  // glowCtx: CSS-blurred canvas for glow shapes; all shadowBlur eliminated.
   // Returns eyeAlpha so orchestrator can fire onReady callback.
-  draw(ctx, t, state) {
+  draw(ctx, t, state, glowCtx) {
     const { inBoot, bootSeq } = state;
     if (inBoot && bootSeq.timeline <= bootSeq.T_EYES_START) return null;
 
@@ -210,18 +209,17 @@ export class EyeSystem {
     const emergeScale = this._blinkMachine === 1 ? this._eyeOpenProgress : 1.0;
     const blinkScale  = (1 - this._blinkT * 0.93) * emergeScale;
 
-    this._drawEyes(ctx, t, eyeAlpha, blinkScale, emergeScale);
-    if (this._showWaveform && eyeAlpha > 0) this._drawWaveform(ctx, t, eyeAlpha * 0.92);
+    this._drawEyes(ctx, t, eyeAlpha, blinkScale, emergeScale, glowCtx);
+    if (this._showWaveform && eyeAlpha > 0) this._drawWaveform(ctx, t, eyeAlpha * 0.92, glowCtx);
 
     return eyeAlpha;
   }
 
-  _drawEyes(ctx, t, alpha, blinkScale, emergeScale) {
+  _drawEyes(ctx, t, alpha, blinkScale, emergeScale, glowCtx) {
     const pW2   = PORTAL_W / 2, pH2 = PORTAL_H / 2;
     const eW2   = EYE_W / 2,    eH2 = EYE_H / 2;
     const baseY = this._cy + BASE_Y_OFFSET;
     const lx    = this._cx - EYE_GAP, rx = this._cx + EYE_GAP;
-    // Reference portrait: cyan (left) eye's portal sits above it, magenta (right) eye's below
     const lpY   = baseY - EYE_H * 0.44, rpY = baseY + EYE_H * 0.44;
     const maxIrisX = Math.max(0, pW2 - eW2 * 0.55);
     const maxIrisY = Math.max(0, pH2 - 4);
@@ -241,12 +239,14 @@ export class EyeSystem {
     const rOrbY = rpY + (baseY + rC.y * 0.5 * eb - rpY) * eb;
 
     ctx.globalAlpha = alpha;
-    this._drawOrb(ctx, t, lOrbX, lOrbY, blinkScale, palette.cyan,    lx, lpY, emergeScale, pW2, pH2, eW2, eH2);
-    this._drawOrb(ctx, t, rOrbX, rOrbY, blinkScale, palette.magenta, rx, rpY, emergeScale, pW2, pH2, eW2, eH2);
+    if (glowCtx) glowCtx.globalAlpha = alpha;
+    this._drawOrb(ctx, t, lOrbX, lOrbY, blinkScale, palette.cyan,    lx, lpY, emergeScale, pW2, pH2, eW2, eH2, glowCtx);
+    this._drawOrb(ctx, t, rOrbX, rOrbY, blinkScale, palette.magenta, rx, rpY, emergeScale, pW2, pH2, eW2, eH2, glowCtx);
     ctx.globalAlpha = 1;
+    if (glowCtx) glowCtx.globalAlpha = 1;
   }
 
-  _drawOrb(ctx, t, ox, oy, bs, col, portalX, portalY, emerge, pW2, pH2, eW2, eH2) {
+  _drawOrb(ctx, t, ox, oy, bs, col, portalX, portalY, emerge, pW2, pH2, eW2, eH2, glowCtx) {
     if (emerge < 0.98) {
       ctx.save();
       ctx.beginPath();
@@ -255,43 +255,76 @@ export class EyeSystem {
         pH2 + EYE_H * easeInOut(emerge), 0, 0, Math.PI * 2);
       ctx.clip();
     }
+
+    // Halo gradient (radial fill — cheap, no blur needed)
     const haloSize = EYE_H * (0.80 + 0.12 * Math.sin(t * 0.022));
     const hg = ctx.createRadialGradient(ox, oy, 2, ox, oy, haloSize);
     hg.addColorStop(0, col + '38'); hg.addColorStop(1, 'transparent');
     ctx.beginPath(); ctx.ellipse(ox, oy, haloSize, haloSize, 0, 0, Math.PI * 2);
     ctx.fillStyle = hg; ctx.fill();
+
+    // Crisp eye shape on entity canvas — NO shadowBlur
     ctx.save(); ctx.translate(ox, oy); ctx.scale(1, bs);
     ctx.beginPath(); ctx.ellipse(0, 0, eW2, eH2, 0, 0, Math.PI * 2);
     ctx.fillStyle = '#f8faff';
-    ctx.shadowColor = 'rgba(220,235,255,0.85)'; ctx.shadowBlur = 22 * this._glowScale;
-    ctx.fill(); ctx.shadowBlur = 0;
+    ctx.fill();
     ctx.strokeStyle = col; ctx.lineWidth = 3;
-    ctx.shadowColor = col; ctx.shadowBlur = (18 + 10 * Math.sin(t * 0.028)) * this._glowScale;
-    ctx.stroke(); ctx.shadowBlur = 0;
+    ctx.stroke();
     ctx.restore();
+
+    // Glow on CSS-blurred canvas — shapes drawn larger to compensate for 8px blur spread
+    // Compositor handles the blur on its own thread; zero JS/Skia cost.
+    if (glowCtx) {
+      glowCtx.save(); glowCtx.translate(ox, oy); glowCtx.scale(1, bs);
+      // White glow fill (oversized so CSS blur spreads it into a halo)
+      glowCtx.beginPath(); glowCtx.ellipse(0, 0, eW2 + 8, eH2 + 14, 0, 0, Math.PI * 2);
+      glowCtx.fillStyle = 'rgba(220,235,255,0.5)';
+      glowCtx.fill();
+      // Colored stroke glow
+      glowCtx.beginPath(); glowCtx.ellipse(0, 0, eW2, eH2, 0, 0, Math.PI * 2);
+      glowCtx.strokeStyle = col; glowCtx.lineWidth = 10;
+      glowCtx.globalAlpha = 0.65;
+      glowCtx.stroke();
+      glowCtx.globalAlpha = 1;
+      glowCtx.restore();
+    }
+
     if (emerge < 0.98) ctx.restore();
   }
 
-  _drawWaveform(ctx, t, alpha) {
+  _drawWaveform(ctx, t, alpha, glowCtx) {
     const breathe = 1.2 + 0.8 * Math.sin(t * 0.018);
     const amp  = (this._entityState === 'speaking' ? 7.5 : this._entityState === 'thinking' ? 4.5 : 2.0) * breathe;
     const freq = this._entityState === 'speaking' ? 0.2 : this._entityState === 'thinking' ? 0.13 : 0.09;
     const spd  = this._entityState === 'speaking' ? 0.011 : this._entityState === 'thinking' ? 0.007 : 0.005;
     const wy = this._cy + 68, wx0 = this._cx - 64, wx1 = this._cx + 64;
-    ctx.globalAlpha = alpha;
+
     [[palette.magenta, 0], [palette.cyan, Math.PI]].forEach(([col, ph]) => {
-      ctx.beginPath();
-      for (let x = wx0; x <= wx1; x += 2) {
-        const frac = (x - wx0) / (wx1 - wx0);
-        const y    = wy + amp * Math.sin(freq * (x - wx0) + t * spd * 60 + ph) * Math.sin(frac * Math.PI);
-        x === wx0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-      }
+      const buildPath = (c) => {
+        c.beginPath();
+        for (let x = wx0; x <= wx1; x += 2) {
+          const frac = (x - wx0) / (wx1 - wx0);
+          const y    = wy + amp * Math.sin(freq * (x - wx0) + t * spd * 60 + ph) * Math.sin(frac * Math.PI);
+          x === wx0 ? c.moveTo(x, y) : c.lineTo(x, y);
+        }
+      };
+
+      // Crisp line on entity canvas — no shadowBlur
+      ctx.globalAlpha = alpha;
+      buildPath(ctx);
       ctx.strokeStyle = col; ctx.lineWidth = 1.9;
-      ctx.shadowColor = col; ctx.shadowBlur = 8 + 4 * Math.sin(t * 0.025 + ph);
-      ctx.stroke(); ctx.shadowBlur = 0;
+      ctx.stroke();
+
+      // Glow line on CSS-blurred canvas
+      if (glowCtx) {
+        glowCtx.globalAlpha = alpha * 0.7;
+        buildPath(glowCtx);
+        glowCtx.strokeStyle = col; glowCtx.lineWidth = 7;
+        glowCtx.stroke();
+        glowCtx.globalAlpha = 1;
+      }
     });
     ctx.globalAlpha = 1;
   }
 
-  // resize() defined above — also update cx/cy for waveform/eye positioning
 }

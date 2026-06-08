@@ -1,7 +1,6 @@
 import { Renderer } from '../renderer.js';
 import { BootSequence } from '../../core/boot-sequence.js';
 import { ParticleSystem } from './particle-system.js';
-import { ConnectionSystem } from './connection-system.js';
 import { PortalSystem } from './portal-system.js';
 import { EyeSystem } from './eye-system.js';
 import { FrameBudget } from './frame-budget.js';
@@ -26,21 +25,19 @@ export class Canvas2dBackend extends Renderer {
       onReady:       opts.onReady       ?? null,
     };
 
-    // Entity layer (eyes, portals) — top canvas, always drawn first every
-    // frame so a heavy field-layer frame can never delay or skip the eyes.
+    // Entity layer (eyes, portals) — top canvas
     this._canvas      = canvas;
     this._ctx         = canvas.getContext('2d');
 
-    // Field layer (particles, connections) — bottom canvas, the CPU-heavy
-    // and throttle-able half of the scene. Composited under the entity layer
-    // by the browser (CSS stacking), so it can be skipped or fall behind
-    // without ever corrupting or delaying the eyes.
+    // Field layer (particles) — bottom canvas, CPU-heavy, throttle-able
     this._fieldCanvas = opts.fieldCanvas;
     this._fieldCtx    = this._fieldCanvas.getContext('2d');
 
-    // Glow layer — DOM canvas with CSS filter:blur set by element.js. Optional:
-    // if absent (standalone use), ParticleSystem falls back to offscreen composite.
+    // Glow layer — DOM canvas with CSS filter:blur(8px) set by element.js.
+    // All blur operations (eyes, portals, particles) draw here; the browser
+    // compositor applies the blur on its own thread, never touching JS/Skia.
     this._glowCanvas  = opts.glowCanvas ?? null;
+    this._glowCtx     = this._glowCanvas ? this._glowCanvas.getContext('2d') : null;
 
     this._dpr         = this._opts.dpr;
     this._t           = 0;
@@ -73,9 +70,6 @@ export class Canvas2dBackend extends Renderer {
       particleCount: this._opts.particleCount,
       glowCanvas: this._glowCanvas,
     });
-
-    this._connectionSystem = new ConnectionSystem();
-    this._connectionSystem.rebuild(this._particleSystem.particles);
 
     this._portalSystem = new PortalSystem({ glowScale: this._opts.glowScale });
     this._portalSystem.resize(this._cx, this._cy);
@@ -119,7 +113,6 @@ export class Canvas2dBackend extends Renderer {
   _preserveParticlesOnResize() {
     this._updateCanvasSize();
     this._particleSystem.resize(this._cx, this._cy);
-    this._connectionSystem.rebuild(this._particleSystem.particles);
     this._portalSystem.resize(this._cx, this._cy);
     this._eyeSystem.resize(this._cx, this._cy);
   }
@@ -130,7 +123,7 @@ export class Canvas2dBackend extends Renderer {
     this._inBoot       = true;
     this._hasBooted    = true;
     this._glowRampT    = 0;
-    this._adaptiveGlow = 0; // ramp in after boot — prevents 1fps cliff
+    this._adaptiveGlow = 0;
     this._bootSeq.reset();
     this._eyeSystem.initBoot();
     this._particleSystem.scatter();
@@ -171,13 +164,11 @@ export class Canvas2dBackend extends Renderer {
         }
       }
 
-      // Ramp glow gradually after boot ends (prevents 1fps cliff)
       if (!this._inBoot && this._glowRampT < 180) {
         this._glowRampT++;
         this._adaptiveGlow = easeInOut(Math.min(1, this._glowRampT / 180));
       }
 
-      // FPS tracking + adaptive glow reduction under load
       this._frameCount++;
       const now     = performance.now();
       const elapsed = now - this._lastMetrics;
@@ -192,7 +183,6 @@ export class Canvas2dBackend extends Renderer {
 
       const state = this._buildState();
 
-      // update() always runs — physics, FSM, position integration
       this._eyeSystem.update(this._t, state);
       if (!this._budget.shouldSkipFieldUpdate()) {
         this._particleSystem.update(this._t, state);
@@ -211,22 +201,27 @@ export class Canvas2dBackend extends Renderer {
     budget.beginFrame();
     let t0;
 
-    // ── Entity layer — eyes + portals, drawn FIRST to its own canvas. ────────
-    // Always runs, every frame, before the field layer gets a chance to spend
-    // any time. The browser composites the two canvases on the GPU, so this
-    // layer's correctness and cadence no longer depend on field-layer cost —
-    // a slow particle frame can delay or be skipped without ever touching it.
+    // Clear glow canvas once per frame; all glow shapes (eyes, portals, particles)
+    // draw into it. CSS filter:blur on the DOM element composites for free.
+    const glowCtx = this._glowCtx;
+    if (glowCtx) {
+      glowCtx.setTransform(1, 0, 0, 1, 0, 0);
+      glowCtx.clearRect(0, 0, this._glowCanvas.width, this._glowCanvas.height);
+      glowCtx.setTransform(this._dpr, 0, 0, this._dpr, 0, 0);
+    }
+
+    // ── Entity layer — portals + eyes, always drawn first. ───────────────────
     const ectx = this._ctx;
     ectx.setTransform(1, 0, 0, 1, 0, 0);
     ectx.clearRect(0, 0, this._canvas.width, this._canvas.height);
     ectx.setTransform(this._dpr, 0, 0, this._dpr, 0, 0);
 
     t0 = performance.now();
-    this._portalSystem.draw(ectx, this._t, state);
+    this._portalSystem.draw(ectx, this._t, state, glowCtx);
     budget.record('portals', performance.now() - t0);
 
     t0 = performance.now();
-    const eyeAlpha = this._eyeSystem.draw(ectx, this._t, state);
+    const eyeAlpha = this._eyeSystem.draw(ectx, this._t, state, glowCtx);
     budget.record('eyes', performance.now() - t0);
 
     if (eyeAlpha !== null && !this._readyCalled && eyeAlpha > 0.95) {
@@ -234,11 +229,9 @@ export class Canvas2dBackend extends Renderer {
       if (typeof this._opts.onReady === 'function') this._opts.onReady();
     }
 
-    // ── Field layer — particles + connections, the CPU-heavy half. ───────────
-    // Gated as a whole: when the EMA-predicted cost would blow the frame
-    // budget, the entire layer is skipped for up to 2 consecutive frames and
-    // simply holds its last-painted content (a separate composited canvas, so
-    // this never corrupts or delays the entity layer above it).
+    // ── Field layer — particles, the CPU-heavy half. ─────────────────────────
+    // Gated: when EMA-predicted cost would blow the frame budget, skipped for
+    // up to 2 consecutive frames (holds last-painted content on the separate canvas).
     if (budget.canDraw('field', 2)) {
       const fctx = this._fieldCtx;
       const t1   = performance.now();
@@ -247,23 +240,9 @@ export class Canvas2dBackend extends Renderer {
       fctx.clearRect(0, 0, this._fieldCanvas.width, this._fieldCanvas.height);
       fctx.setTransform(this._dpr, 0, 0, this._dpr, 0, 0);
 
-      if (!this._opts.transparent) {
-        fctx.fillStyle = '#010008';
-        fctx.fillRect(0, 0, this._fieldCanvas.width / this._dpr, this._fieldCanvas.height / this._dpr);
-      }
-
-      // Particles — always draw when the layer runs (no skip = no flicker).
-      // When over budget, shadowBlur is dropped instead (flat particles, no pop).
       t0 = performance.now();
       this._particleSystem.draw(fctx, this._t, state, budget.canGlow());
       budget.record('particles', performance.now() - t0);
-
-      // Connections — binary skip under load (thin lines, acceptable to drop).
-      if (state.hasBooted && budget.canDraw('connections')) {
-        t0 = performance.now();
-        this._connectionSystem.draw(fctx, this._t, state, this._particleSystem.particles);
-        budget.record('connections', performance.now() - t0);
-      }
 
       budget.record('field', performance.now() - t1);
     }
@@ -308,7 +287,6 @@ export class Canvas2dBackend extends Renderer {
     return {
       fps:          this._fps,
       particles:    this._particleSystem.particles.length,
-      links:        this._connectionSystem.links.length,
       adaptiveGlow: this._adaptiveGlow,
       entityState:  this._eyeSystem._entityState,
       budget:       this._budget.metrics,
