@@ -12,7 +12,7 @@ const NEBULA_RADIUS = 130, FALLOFF_RADIUS = 155;
 const GLOW_FRACTION = 0.12;
 
 export class ParticleSystem {
-  constructor({ cx, cy, canvas, dpr, particleCount }) {
+  constructor({ cx, cy, canvas, dpr, particleCount, glowCanvas }) {
     this._cx            = cx;
     this._cy            = cy;
     this._canvas        = canvas;
@@ -21,15 +21,17 @@ export class ParticleSystem {
     this._particles     = [];
     this._initParticles();
 
-    // Offscreen glow buffer — Phase 4 compositing.
-    // Glow particles (shadowBlur) redraw into this buffer every N frames;
-    // the buffer is then composited onto the main context every frame via
-    // drawImage(). Persistence between redraws is what produces the smooth
-    // bloom — and it means the expensive shadowBlur pass runs at a fraction
-    // of the field layer's frame rate instead of every frame.
-    this._glowCanvas = document.createElement('canvas');
-    this._glowCanvas.width  = canvas.width;
-    this._glowCanvas.height = canvas.height;
+    // Glow buffer. When glowCanvas is provided by element.js (a DOM-resident
+    // canvas with CSS filter:blur), the browser compositor handles the blur and
+    // no ctx.filter drawImage composite is needed. When absent, create an
+    // offscreen canvas and composite it manually (legacy / standalone use).
+    this._glowExternal = !!glowCanvas;
+    this._glowCanvas   = glowCanvas || (() => {
+      const c = document.createElement('canvas');
+      c.width  = canvas.width;
+      c.height = canvas.height;
+      return c;
+    })();
     this._glowCtx    = this._glowCanvas.getContext('2d');
     this._glowFrame     = 0;
     this._physicsFrame  = 0;  // throttle: skip every-other physics tick post-boot
@@ -80,8 +82,10 @@ export class ParticleSystem {
     while (this._particles.length < this._particleCount) this._particles.push(this._makeParticle(true));
     if (this._particles.length > this._particleCount) this._particles.length = this._particleCount;
 
-    this._glowCanvas.width  = this._canvas.width;
-    this._glowCanvas.height = this._canvas.height;
+    if (!this._glowExternal) {
+      this._glowCanvas.width  = this._canvas.width;
+      this._glowCanvas.height = this._canvas.height;
+    }
     this._glowFrame = 0;
   }
 
@@ -124,7 +128,7 @@ export class ParticleSystem {
     const dx = p.rx - this._cx, dy = p.ry - this._cy;
     const d  = Math.sqrt(dx * dx + dy * dy);
     const falloff = Math.max(0, 1 - d / FALLOFF_RADIUS);
-    const pulse   = 0.62 + 0.38 * Math.sin(p.phase * 2 + t * 0.015);
+    const pulse   = 0.62 + 0.38 * Math.sin(p.phase * 2);
     const vis     = inBoot ? Math.min(1, convProg * 3) : 1;
     return { alpha: p.alpha * falloff * pulse * vis, settleBlend };
   }
@@ -184,14 +188,18 @@ export class ParticleSystem {
       }
       this._glowFrame--;
 
-      // Single GPU blur composite — O(1) regardless of glow particle count.
-      const blurPx = Math.round((6 + entropy * 5) * effectiveGlow);
-      ctx.save();
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.filter = `blur(${blurPx}px)`;
-      ctx.drawImage(this._glowCanvas, 0, 0);
-      ctx.filter = 'none';
-      ctx.restore();
+      if (!this._glowExternal) {
+        // Fallback: composite offscreen glow buffer onto field canvas via ctx.filter.
+        // When glowCanvas is DOM-resident (CSS filter:blur), the compositor handles
+        // this automatically and we skip the Skia main-thread blur call entirely.
+        const blurPx = Math.round((6 + entropy * 5) * effectiveGlow);
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.filter = `blur(${blurPx}px)`;
+        ctx.drawImage(this._glowCanvas, 0, 0);
+        ctx.filter = 'none';
+        ctx.restore();
+      }
     }
   }
 

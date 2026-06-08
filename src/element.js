@@ -34,10 +34,11 @@ class RaBbLEEntityElement extends HTMLElement {
     this.style.display  = this.style.display  || 'block';
     this.style.overflow = 'visible';
 
-    // Two stacked canvases — composited by the browser, not by draw order.
-    // Field layer (particles, connections) is the CPU-heavy, throttle-able
-    // bottom layer. Entity layer (eyes, portals) sits above it and always
-    // draws first each frame, so a slow field frame can never delay the eyes.
+    // Three stacked canvases — composited by the browser's GPU compositor.
+    // Field (z:0) — flat particles + connections; CPU-heavy, throttle-able.
+    // Glow (z:1)  — bloom particles only; CSS filter:blur on the DOM element
+    //               so the blur runs on the compositor thread, never JS/Skia.
+    // Entity (z:2) — eyes + portals; always draws first, never delayed by field.
     const layerStyle = (z) =>
       'position:absolute;left:50%;top:50%;' +
       'transform:translate(-50%,-50%);' +
@@ -48,9 +49,14 @@ class RaBbLEEntityElement extends HTMLElement {
     this._fieldCanvas.style.cssText = layerStyle(0);
     this.appendChild(this._fieldCanvas);
 
+    this._glowCanvas = document.createElement('canvas');
+    this._glowCanvas.className = 'rabble-entity-canvas rabble-entity-canvas--glow';
+    this._glowCanvas.style.cssText = layerStyle(1) + ';filter:blur(8px)';
+    this.appendChild(this._glowCanvas);
+
     this._canvas = document.createElement('canvas');
     this._canvas.className = 'rabble-entity-canvas rabble-entity-canvas--entity';
-    this._canvas.style.cssText = layerStyle(1);
+    this._canvas.style.cssText = layerStyle(2);
     this.appendChild(this._canvas);
 
     // Mobile performance: cap DPR and reduce glow on high-DPR small screens
@@ -78,7 +84,7 @@ class RaBbLEEntityElement extends HTMLElement {
       const devW = Math.round(cssW * perfDpr);
       const devH = Math.round(cssH * perfDpr);
 
-      for (const c of [this._fieldCanvas, this._canvas]) {
+      for (const c of [this._fieldCanvas, this._glowCanvas, this._canvas]) {
         if (c.width  !== devW) c.width  = devW;
         if (c.height !== devH) c.height = devH;
         c.style.width  = cssW + 'px';
@@ -103,6 +109,7 @@ class RaBbLEEntityElement extends HTMLElement {
 
     this._backend = new Canvas2dBackend(this._canvas, {
       fieldCanvas:   this._fieldCanvas,
+      glowCanvas:    this._glowCanvas,
       mode:          this.getAttribute('mode') || 'idle',
       particleCount,
       transparent:   true,

@@ -59,6 +59,10 @@ export class FrameBudget {
   // Caller skips shadowBlur — particles still draw every frame (no flicker).
   canGlow() { return this._glowAllowed; }
 
+  // True when the field was skipped last frame — caller should also skip the
+  // physics update so particle sin/cos never burns the eyes' frame budget.
+  shouldSkipFieldUpdate() { return (this._skips['field'] ?? 0) > 0; }
+
   // Returns false when connections + everything else is predicted to exceed budget.
   // Uses a stable pre-frame decision so connections aren't starved by glow frames.
   canDraw(name, maxSkips = Infinity) {

@@ -38,9 +38,12 @@ export class AmbientField {
     document.body.insertBefore(this._cv, document.body.firstChild);
     this._ctx = this._cv.getContext('2d');
 
-    // Offscreen glow buffer — glow particles drawn flat here every GLOW_EVERY
-    // frames, composited onto main canvas with ctx.filter=blur (one GPU pass).
-    this._glowCv  = document.createElement('canvas');
+    // Glow canvas — DOM element with CSS filter:blur(8px) so the browser
+    // compositor handles the blur on its own thread, never touching JS/Skia.
+    // Inserted before _cv so it sits visually behind the flat-particle layer.
+    this._glowCv = document.createElement('canvas');
+    this._glowCv.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:0;filter:blur(8px);';
+    document.body.insertBefore(this._glowCv, this._cv);
     this._glowCtx = this._glowCv.getContext('2d');
 
     // Grid baked to its own offscreen canvas — redrawn only on resize,
@@ -165,9 +168,7 @@ export class AmbientField {
         }
         gctx.globalAlpha = 1;
       }
-      ctx.filter = 'blur(8px)';
-      ctx.drawImage(this._glowCv, 0, 0);
-      ctx.filter = 'none';
+      // Glow canvas composites via CSS filter:blur on its DOM element — no drawImage needed.
 
       // Connections — single batched path, one stroke() for all edges
       ctx.beginPath();
@@ -190,6 +191,7 @@ export class AmbientField {
   destroy() {
     if (this._rafId) cancelAnimationFrame(this._rafId);
     window.removeEventListener('resize', this._onResize);
+    this._glowCv.remove();
     this._cv.remove();
   }
 }

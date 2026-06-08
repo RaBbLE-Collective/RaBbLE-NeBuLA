@@ -38,6 +38,10 @@ export class Canvas2dBackend extends Renderer {
     this._fieldCanvas = opts.fieldCanvas;
     this._fieldCtx    = this._fieldCanvas.getContext('2d');
 
+    // Glow layer — DOM canvas with CSS filter:blur set by element.js. Optional:
+    // if absent (standalone use), ParticleSystem falls back to offscreen composite.
+    this._glowCanvas  = opts.glowCanvas ?? null;
+
     this._dpr         = this._opts.dpr;
     this._t           = 0;
     this._rafId       = null;
@@ -67,6 +71,7 @@ export class Canvas2dBackend extends Renderer {
       cx: this._cx, cy: this._cy,
       canvas: this._canvas, dpr: this._dpr,
       particleCount: this._opts.particleCount,
+      glowCanvas: this._glowCanvas,
     });
 
     this._connectionSystem = new ConnectionSystem();
@@ -103,6 +108,10 @@ export class Canvas2dBackend extends Renderer {
     this._canvas.height      = h;
     this._fieldCanvas.width  = w;
     this._fieldCanvas.height = h;
+    if (this._glowCanvas) {
+      this._glowCanvas.width  = w;
+      this._glowCanvas.height = h;
+    }
     this._cx = w / (2 * this._dpr);
     this._cy = h * 0.47 / this._dpr;
   }
@@ -185,7 +194,9 @@ export class Canvas2dBackend extends Renderer {
 
       // update() always runs — physics, FSM, position integration
       this._eyeSystem.update(this._t, state);
-      this._particleSystem.update(this._t, state);
+      if (!this._budget.shouldSkipFieldUpdate()) {
+        this._particleSystem.update(this._t, state);
+      }
 
       this._draw(state);
       this._rafId = requestAnimationFrame(frame);
