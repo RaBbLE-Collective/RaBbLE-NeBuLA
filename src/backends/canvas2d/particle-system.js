@@ -17,7 +17,6 @@ export class ParticleSystem {
     this._dpr           = dpr;
     this._particleCount = particleCount;
     this._particles     = [];
-    this._colorBuckets  = new Map();  // color → particle[] — built once, never rebuilt
     this._initParticles();
 
     // Glow buffer — externally managed (DOM canvas with CSS blur) or owned offscreen.
@@ -28,19 +27,8 @@ export class ParticleSystem {
       c.height = canvas.height;
       return c;
     })();
-    this._glowCtx    = this._glowCanvas.getContext('2d');
-    this._glowFrame  = 0;
-
-    // Offscreen particle compositing canvas — flat particles batch here, then
-    // a single destination-in radial gradient clips the falloff, then one
-    // drawImage composites onto the field canvas. Reduces fill() calls from
-    // N_particles to N_colors (21 max) and eliminates per-particle sqrt.
-    this._particleCanvas = document.createElement('canvas');
-    this._particleCanvas.width  = canvas.width;
-    this._particleCanvas.height = canvas.height;
-    this._particleCtx    = this._particleCanvas.getContext('2d');
-    this._falloffGrad    = null;
-    this._rebuildFalloffGrad();
+    this._glowCtx   = this._glowCanvas.getContext('2d');
+    this._glowFrame = 0;
 
     this._physicsFrame = 0;
   }
@@ -72,31 +60,6 @@ export class ParticleSystem {
     for (let i = 0; i < this._particleCount; i++) {
       this._particles.push(this._makeParticle(true));
     }
-    this._buildColorBuckets();
-  }
-
-  // Build color bucket map once — particle colors are fixed at creation.
-  // Each bucket holds all particles of that color; the glow check in the draw
-  // pass skips glow particles inline (only ~12% of the set, negligible cost).
-  _buildColorBuckets() {
-    this._colorBuckets.clear();
-    for (const p of this._particles) {
-      if (!this._colorBuckets.has(p.color)) this._colorBuckets.set(p.color, []);
-      this._colorBuckets.get(p.color).push(p);
-    }
-  }
-
-  // Cache the radial falloff gradient on the particle context.
-  // Only needs rebuilding when cx/cy change (resize).
-  _rebuildFalloffGrad() {
-    const g = this._particleCtx.createRadialGradient(
-      this._cx, this._cy, 0,
-      this._cx, this._cy, FALLOFF_RADIUS
-    );
-    g.addColorStop(0,    'rgba(0,0,0,1)');
-    g.addColorStop(0.55, 'rgba(0,0,0,0.75)');
-    g.addColorStop(1,    'rgba(0,0,0,0)');
-    this._falloffGrad = g;
   }
 
   scatter() {
@@ -119,9 +82,6 @@ export class ParticleSystem {
       this._glowCanvas.width  = this._canvas.width;
       this._glowCanvas.height = this._canvas.height;
     }
-    this._particleCanvas.width  = this._canvas.width;
-    this._particleCanvas.height = this._canvas.height;
-    this._rebuildFalloffGrad();
     this._glowFrame = 0;
   }
 
@@ -152,78 +112,46 @@ export class ParticleSystem {
     }
   }
 
-  // _visibility() — kept for glow pass only (~18 particles, every 2-4 frames).
-  // The flat pass no longer calls this; falloff is handled by the gradient overlay.
+  // _visibility() — glow pass only. Flat pass inlines this to avoid call overhead.
   _visibility(p, state) {
     const { inBoot, convProg, settleBlend } = state;
     const dx = p.rx - this._cx, dy = p.ry - this._cy;
-    const d  = Math.sqrt(dx * dx + dy * dy);
-    const falloff = Math.max(0, 1 - d / FALLOFF_RADIUS);
+    const d2 = dx * dx + dy * dy;
+    const falloff = Math.max(0, 1 - d2 / (FALLOFF_RADIUS * FALLOFF_RADIUS));
     const pulse   = 0.62 + 0.38 * Math.sin(p.phase * 2);
     const vis     = inBoot ? Math.min(1, convProg * 3) : 1;
     return { alpha: p.alpha * falloff * pulse * vis, settleBlend };
   }
 
-  // Flat draw pass — batched by color, one fill() per color group (21 max).
-  // Falloff is applied via a destination-in radial gradient on the offscreen
-  // particle canvas, then composited onto the field canvas in one drawImage.
-  // Eliminates: N_flat individual fill() GPU dispatches, N_flat sqrt() calls.
-  _drawFlatBatched(ctx, state, glowOn) {
-    const { inBoot, convProg } = state;
-    const vis = inBoot ? Math.min(1, convProg * 3) : 1;
-    if (vis <= 0) return;
-
-    const pCtx = this._particleCtx;
-    const W    = this._particleCanvas.width;
-    const H    = this._particleCanvas.height;
-
-    // Clear the offscreen compositing canvas
-    pCtx.setTransform(1, 0, 0, 1, 0, 0);
-    pCtx.clearRect(0, 0, W, H);
-    pCtx.setTransform(this._dpr, 0, 0, this._dpr, 0, 0);
-
-    // Batch by color — one beginPath + N arcs + fill() per color group.
-    // All particles draw at globalAlpha=0.85; per-particle alpha variation
-    // is replaced by the spatial gradient in the next pass.
-    pCtx.globalAlpha = 0.85;
-    for (const [color, pts] of this._colorBuckets) {
-      pCtx.fillStyle = color;
-      pCtx.beginPath();
-      let drew = false;
-      for (const p of pts) {
-        if (glowOn && p.glow) continue;
-        pCtx.moveTo(p.rx + p.r, p.ry);
-        pCtx.arc(p.rx, p.ry, p.r, 0, Math.PI * 2);
-        drew = true;
-      }
-      if (drew) pCtx.fill();
-    }
-    pCtx.globalAlpha = 1;
-
-    // Apply radial falloff — destination-in clips the particle layer to the
-    // gradient shape: fully opaque at entity center, transparent at FALLOFF_RADIUS.
-    // This replaces the per-particle sqrt falloff with a single gradient pass.
-    pCtx.globalCompositeOperation = 'destination-in';
-    pCtx.fillStyle = this._falloffGrad;
-    pCtx.fillRect(0, 0, W / this._dpr, H / this._dpr);
-    pCtx.globalCompositeOperation = 'source-over';
-
-    // Composite onto field canvas — one drawImage instead of N fill() calls.
-    ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.globalAlpha = vis;
-    ctx.drawImage(this._particleCanvas, 0, 0);
-    ctx.globalAlpha = 1;
-    ctx.restore();
-  }
-
-  // draw() — flat pass is now batched; glow pass unchanged (small N, infrequent).
+  // draw() — flat pass inlined for speed; glow pass unchanged (small N, infrequent).
   draw(ctx, t, state, allowGlow = true) {
     const { effectiveGlow, adaptiveGlow, entropy } = state;
     const glowOn = allowGlow && effectiveGlow > 0.05;
 
-    // Pass 1 — flat particles, batched by color with gradient falloff overlay.
-    this._drawFlatBatched(ctx, state, glowOn);
+    // Pass 1 — flat particles, per-particle draw with inlined visibility math.
+    // Squared falloff (no sqrt), early-exit for out-of-range particles.
+    {
+      const cx = this._cx, cy = this._cy;
+      const FR2 = FALLOFF_RADIUS * FALLOFF_RADIUS;
+      const { inBoot, convProg } = state;
+      const vis = inBoot ? Math.min(1, convProg * 3) : 1;
+      const pts = this._particles;
+      for (let i = 0, n = pts.length; i < n; i++) {
+        const p = pts[i];
+        if (glowOn && p.glow) continue;
+        const dx = p.rx - cx, dy = p.ry - cy;
+        const d2 = dx * dx + dy * dy;
+        if (d2 >= FR2) continue;                               // outside falloff — skip draw entirely
+        const falloff = 1 - d2 / FR2;
+        const alpha   = p.alpha * falloff * (0.62 + 0.38 * Math.sin(p.phase * 2)) * vis;
+        ctx.beginPath();
+        ctx.arc(p.rx, p.ry, p.r, 0, Math.PI * 2);
+        ctx.fillStyle    = p.color;
+        ctx.globalAlpha  = alpha;
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
 
     // Pass 2 — glow bloom layer, drawn into offscreen buffer every N frames.
     // Still per-particle (only ~18 particles, redraws every 2-4 frames — cheap).
