@@ -8,15 +8,14 @@ const COLS = [
 
 const GLOW_EVERY    = 3;
 const GLOW_FRACTION = 0.12;
-const CONN_D2       = 85 * 85;
 
 // AmbientField — drop-in replacement for RaBbLE-bg.js.
-// Draws the outrun perspective grid + ambient particle nebula on a single
-// fixed canvas, sharing all Phase 4/5 NeBuLA perf patterns:
-//   - Grid baked to an offscreen canvas on init/resize — zero gradient cost per frame
-//   - Physics throttled every-other-frame post-init
-//   - Two-pass flat + GPU-composite glow (ctx.filter=blur at drawImage)
-//   - Connections batched into a single beginPath()/stroke()
+// Draws the outrun perspective grid + ambient particle nebula on fixed canvases.
+// Budget contract: background-only, never competes with the entity layer.
+//   - Grid baked offscreen on init/resize — zero gradient cost per frame
+//   - Half-rate render (30fps): holds last canvas on skip frames; GPU re-composites texture
+//   - Glow via CSS element filter:blur on DOM canvas — compositor thread, zero JS/Skia cost
+//   - No connections — O(N²) at 0.07 opacity is pure overhead for a background
 //
 // Usage: const bg = new NeBuLA.AmbientField({ particles: true, grid: true });
 //        bg.destroy();  // cleanup
@@ -28,9 +27,10 @@ export class AmbientField {
       n:         opts.n         ?? 100,
     };
 
-    this._rafId       = null;
+    this._rafId        = null;
     this._physicsFrame = 0;
-    this._glowFrame   = 0;
+    this._glowFrame    = 0;
+    this._skipFrame    = 0;  // half-rate: alternates 0/1, skip odd frames entirely
 
     // Main canvas — fixed, covers the full viewport, lowest z-index.
     this._cv  = document.createElement('canvas');
@@ -118,29 +118,35 @@ export class AmbientField {
   }
 
   _frame() {
+    this._rafId = requestAnimationFrame(() => this._frame());
+
+    // Half-rate: skip every other frame entirely.
+    // Ambient drift at 0.11px/frame is imperceptible at 30fps vs 60fps.
+    // Holding the last painted canvas costs nothing — GPU just re-composites
+    // the existing texture. This halves all JS + paint cost for the background.
+    this._skipFrame ^= 1;
+    if (this._skipFrame) return;
+
     const W = this._cv.width, H = this._cv.height;
     const ctx = this._ctx;
     ctx.clearRect(0, 0, W, H);
 
-    // Grid — static baked layer, one drawImage per frame
+    // Grid — static baked layer, one drawImage per draw-frame
     if (this._opts.grid) ctx.drawImage(this._gridCv, 0, 0);
 
     if (this._opts.particles) {
       const pts = this._pts;
 
-      // Physics — every-other-frame throttle; halves sin/cos budget
-      this._physicsFrame ^= 1;
-      if (!this._physicsFrame) {
-        for (let i = 0; i < pts.length; i++) {
-          const p = pts[i];
-          p.x += p.vx; p.y += p.vy;
-          p.phase += 0.011;
-          if (p.x < -8) p.x = W + 8; else if (p.x > W + 8) p.x = -8;
-          if (p.y < -8) p.y = H + 8; else if (p.y > H + 8) p.y = -8;
-        }
+      // Physics — every draw-frame (already running at half the RAF rate)
+      for (let i = 0; i < pts.length; i++) {
+        const p = pts[i];
+        p.x += p.vx; p.y += p.vy;
+        p.phase += 0.022;  // doubled to compensate for half-rate so drift speed is unchanged
+        if (p.x < -8) p.x = W + 8; else if (p.x > W + 8) p.x = -8;
+        if (p.y < -8) p.y = H + 8; else if (p.y > H + 8) p.y = -8;
       }
 
-      // Pass 1 — flat particles, every frame, no shadowBlur
+      // Pass 1 — flat particles
       for (let i = 0; i < pts.length; i++) {
         const p = pts[i];
         if (p.glow) continue;
@@ -151,8 +157,7 @@ export class AmbientField {
       }
       ctx.globalAlpha = 1;
 
-      // Pass 2 — glow buffer redrawn every GLOW_EVERY frames; composited with
-      // a single ctx.filter=blur drawImage — one GPU blur pass, not N shadowBlurs
+      // Pass 2 — glow buffer; redraws every GLOW_EVERY draw-frames
       this._glowFrame--;
       if (this._glowFrame <= 0) {
         this._glowFrame = GLOW_EVERY;
@@ -170,22 +175,8 @@ export class AmbientField {
       }
       // Glow canvas composites via CSS filter:blur on its DOM element — no drawImage needed.
 
-      // Connections — single batched path, one stroke() for all edges
-      ctx.beginPath();
-      ctx.lineWidth = 0.4; ctx.strokeStyle = '#3377ee';
-      for (let i = 0; i < pts.length; i++) {
-        for (let j = i + 1; j < pts.length; j++) {
-          const dx = pts[i].x - pts[j].x, dy = pts[i].y - pts[j].y;
-          if (dx * dx + dy * dy < CONN_D2) {
-            ctx.moveTo(pts[i].x, pts[i].y);
-            ctx.lineTo(pts[j].x, pts[j].y);
-          }
-        }
-      }
-      ctx.globalAlpha = 0.07; ctx.stroke(); ctx.globalAlpha = 1;
+      // Connections removed — O(N²) per frame at negligible opacity is pure overhead.
     }
-
-    this._rafId = requestAnimationFrame(() => this._frame());
   }
 
   destroy() {
