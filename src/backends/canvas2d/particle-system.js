@@ -153,16 +153,16 @@ export class ParticleSystem {
       ctx.globalAlpha = 1;
     }
 
-    // Pass 2 — glow bloom layer, drawn into offscreen buffer every N frames.
-    // Still per-particle (only ~18 particles, redraws every 2-4 frames — cheap).
+    // Pass 2 — glow bloom layer.
+    // External glowCanvas: backend clears it once per frame, so we always redraw
+    // (no frame-skip caching — ~18 arc+fill calls is <0.3ms, not worth the flicker).
+    // Offscreen canvas (standalone): cached every N frames + drawImage composite.
     if (glowOn) {
-      const glowInterval = adaptiveGlow < 0.6 ? 4 : (adaptiveGlow < 0.9 ? 3 : 2);
-      if (this._glowFrame <= 0) {
-        this._glowFrame = glowInterval;
-        const gctx = this._glowCtx;
-        gctx.setTransform(1, 0, 0, 1, 0, 0);
-        gctx.clearRect(0, 0, this._glowCanvas.width, this._glowCanvas.height);
-        gctx.setTransform(this._dpr, 0, 0, this._dpr, 0, 0);
+      const gctx = this._glowCtx;
+
+      if (this._glowExternal) {
+        // Shared glow canvas — just draw, backend already cleared it this frame.
+        // DPR transform already set by backend.
         for (const p of this._particles) {
           if (!p.glow) continue;
           const { alpha, settleBlend } = this._visibility(p, state);
@@ -175,10 +175,28 @@ export class ParticleSystem {
           gctx.fill();
           gctx.globalAlpha = 1;
         }
-      }
-      this._glowFrame--;
-
-      if (!this._glowExternal) {
+      } else {
+        // Offscreen canvas (standalone use) — cached N frames, composited via drawImage.
+        const glowInterval = adaptiveGlow < 0.6 ? 4 : (adaptiveGlow < 0.9 ? 3 : 2);
+        if (this._glowFrame <= 0) {
+          this._glowFrame = glowInterval;
+          gctx.setTransform(1, 0, 0, 1, 0, 0);
+          gctx.clearRect(0, 0, this._glowCanvas.width, this._glowCanvas.height);
+          gctx.setTransform(this._dpr, 0, 0, this._dpr, 0, 0);
+          for (const p of this._particles) {
+            if (!p.glow) continue;
+            const { alpha, settleBlend } = this._visibility(p, state);
+            const eGlow  = 1 + state.entropy * 1.5;
+            const rScale = 1 + (0.4 + settleBlend * 0.6) * state.effectiveGlow * eGlow;
+            gctx.beginPath();
+            gctx.arc(p.rx, p.ry, p.r * rScale, 0, Math.PI * 2);
+            gctx.fillStyle = p.color;
+            gctx.globalAlpha = Math.min(1, alpha * 1.6);
+            gctx.fill();
+            gctx.globalAlpha = 1;
+          }
+        }
+        this._glowFrame--;
         const blurPx = Math.round((6 + entropy * 5) * effectiveGlow);
         ctx.save();
         ctx.setTransform(1, 0, 0, 1, 0, 0);
