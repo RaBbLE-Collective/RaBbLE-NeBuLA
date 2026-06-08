@@ -15,6 +15,8 @@
  *   ring.destroy();
  */
 
+import { nextUid } from './shared.js';
+
 const RUNES = ['◈', '∿', '⌬', '※', '◇', '◆', '⌘', '◉', '✸', '⬡', '◎', '▸'];
 
 function buildRuneSpans() {
@@ -41,6 +43,7 @@ function buildRuneSpans() {
  */
 export function createGrimoireRing(opts = {}) {
   const { color = '#bf5fff' } = opts;
+  const uid = nextUid('gr');
 
   const el = document.createElement('div');
   el.className = 'sc-ring';
@@ -64,7 +67,7 @@ export function createGrimoireRing(opts = {}) {
 
 <svg viewBox="0 0 200 200" class="sc-ring-svg" aria-hidden="true">
   <defs>
-    <radialGradient id="sc-ring-floor" cx="50%" cy="50%" r="50%">
+    <radialGradient id="${uid}-floor" cx="50%" cy="50%" r="50%">
       <stop offset="0%"   stop-color="var(--ring-color)" stop-opacity="0.10"/>
       <stop offset="70%"  stop-color="var(--ring-color)" stop-opacity="0.02"/>
       <stop offset="100%" stop-color="var(--ring-color)" stop-opacity="0"/>
@@ -72,7 +75,7 @@ export function createGrimoireRing(opts = {}) {
   </defs>
 
   <!-- inner floor wash -->
-  <circle cx="100" cy="100" r="78" fill="url(#sc-ring-floor)"/>
+  <circle cx="100" cy="100" r="78" fill="url(#${uid}-floor)"/>
 
   <!-- outer solid ring -->
   <circle cx="100" cy="100" r="92" fill="none"

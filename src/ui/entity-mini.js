@@ -11,7 +11,7 @@
  *   mini.destroy();
  */
 
-let _uid = 0;
+import { nextUid } from './shared.js';
 
 /** Canonical entity color palettes. Left/right eye + haze + particle dots. */
 export const ENTITY_PALETTES = {
@@ -61,7 +61,7 @@ export function createEntityMini(entityId, opts = {}) {
   const seed    = (entityId.charCodeAt(2) || 7);
   const count   = dense ? 36 : 14;
   const dots    = buildDots(seed, count);
-  const uid     = `em${_uid++}`;
+  const uid     = nextUid('em');
   const w       = size;
   const h       = Math.round(size * (40 / 60));
 

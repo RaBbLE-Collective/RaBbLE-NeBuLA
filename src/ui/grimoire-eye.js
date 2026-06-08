@@ -12,7 +12,7 @@
  * SVG strokes/fills that reference var(--eye-color) via inline style.
  */
 
-let _uid = 0;
+import { nextUid } from './shared.js';
 
 /**
  * @param {object} [opts]
@@ -21,7 +21,7 @@ let _uid = 0;
  */
 export function createGrimoireEye(opts = {}) {
   const { color = '#bf5fff' } = opts;
-  const uid = `ge${_uid++}`;
+  const uid = nextUid('ge');
 
   const el = document.createElement('div');
   el.className = 'sc-eye';
