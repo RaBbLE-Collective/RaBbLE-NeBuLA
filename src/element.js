@@ -103,9 +103,10 @@ class RaBbLEEntityElement extends HTMLElement {
     // NeBuLA owns particle-system performance — cap centrally so any host
     // page's request lands in the "living brain" range (sparse field, fluid
     // motion) rather than the old dense-nebula range that bogged down the
-    // shared GPU/CPU budget. 260 default, 300 hard ceiling, lower on mobile.
-    const requested     = parseInt(this.getAttribute('particle-count') || '260', 10);
-    const particleCount = Math.min(isMobile ? 160 : 300, requested);
+    // shared GPU/CPU budget. 150 desktop ceiling; Three.js backend is the
+    // right path for higher counts (instanced rendering, one draw call).
+    const requested     = parseInt(this.getAttribute('particle-count') || '150', 10);
+    const particleCount = Math.min(isMobile ? 100 : 150, requested);
 
     this._backend = new Canvas2dBackend(this._canvas, {
       fieldCanvas:   this._fieldCanvas,
