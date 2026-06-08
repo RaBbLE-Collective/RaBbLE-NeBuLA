@@ -7,6 +7,9 @@ const PARTICLE_COLORS = [
 ];
 
 const NEBULA_RADIUS = 130, FALLOFF_RADIUS = 155;
+// Fraction of particles that contribute to the bloom layer.
+// Lower = faster glow-buffer redraw (fewer flat draws into offscreen canvas).
+const GLOW_FRACTION = 0.12;
 
 export class ParticleSystem {
   constructor({ cx, cy, canvas, dpr, particleCount }) {
@@ -28,7 +31,8 @@ export class ParticleSystem {
     this._glowCanvas.width  = canvas.width;
     this._glowCanvas.height = canvas.height;
     this._glowCtx    = this._glowCanvas.getContext('2d');
-    this._glowFrame  = 0;
+    this._glowFrame     = 0;
+    this._physicsFrame  = 0;  // throttle: skip every-other physics tick post-boot
   }
 
   get particles() { return this._particles; }
@@ -49,7 +53,7 @@ export class ParticleSystem {
       phase: Math.random() * Math.PI * 2,
       speed: Math.random() * 0.011 + 0.004,
       cs:    Math.random() * 0.032 + 0.012,
-      glow:  Math.random() > 0.72,
+      glow:  Math.random() < GLOW_FRACTION,
     };
   }
 
@@ -81,9 +85,20 @@ export class ParticleSystem {
     this._glowFrame = 0;
   }
 
-  // update() — position integration, always runs every frame
+  // update() — position integration.
+  // During boot: runs every frame (convergence must be smooth).
+  // Post-boot: runs every other frame — drift amplitude is ~2px/frame at
+  // 60fps, so halving frequency is imperceptible at the motion speeds used
+  // but cuts 260 sin/cos calls per skipped frame.
   update(t, state) {
     const { inBoot, convProg, settleBlend, entropy } = state;
+
+    // Always run during boot; throttle to every-other-frame post-boot.
+    if (!inBoot) {
+      this._physicsFrame ^= 1;
+      if (this._physicsFrame) return;
+    }
+
     const eMul = 1 + entropy * 2.5;
 
     for (const p of this._particles) {
@@ -121,29 +136,32 @@ export class ParticleSystem {
     ctx.globalAlpha = 1;
   }
 
-  _drawGlow(ctx, p, t, state) {
+  // Draws a glow particle flat — no shadowBlur. The bloom comes from a single
+  // ctx.filter='blur()' applied at composite time in draw(), not per-particle.
+  // Particles are drawn larger/more opaque so the blur spreads a visible halo.
+  _drawGlowFlat(ctx, p, t, state) {
     const { alpha, settleBlend } = this._visibility(p, t, state);
-    const eGlow = 1 + state.entropy * 1.5;
-    ctx.shadowColor = p.color;
-    ctx.shadowBlur  = (20 + settleBlend * 14 + 7 * Math.sin(p.phase + t * 0.02)) * state.effectiveGlow * eGlow;
-    ctx.beginPath(); ctx.arc(p.rx, p.ry, p.r, 0, Math.PI * 2);
-    ctx.fillStyle = p.color; ctx.globalAlpha = alpha; ctx.fill();
-    ctx.shadowBlur = 0;
+    const eGlow  = 1 + state.entropy * 1.5;
+    // Scale up slightly so the blur-spread halo has visible material to work with
+    const rScale = 1 + (0.4 + settleBlend * 0.6) * state.effectiveGlow * eGlow;
+    ctx.beginPath(); ctx.arc(p.rx, p.ry, p.r * rScale, 0, Math.PI * 2);
+    ctx.fillStyle = p.color; ctx.globalAlpha = Math.min(1, alpha * 1.6); ctx.fill();
     ctx.globalAlpha = 1;
   }
 
   // draw() — canvas rendering, always called every frame (no skip = no flicker).
-  // allowGlow: when false, the offscreen glow pass is skipped entirely and
-  // every particle draws flat — cuts draw time by ~50-60% with no visible pop.
+  // allowGlow: when false, the glow pass is skipped entirely — every particle
+  // draws flat. Dropping glow cuts draw time dramatically with no visible pop.
   //
-  // Glow particles redraw into an offscreen buffer every `glowInterval` frames
-  // (2 normally, ramping to 4 under sustained load — driven by the existing
-  // adaptiveGlow signal) and that buffer is composited onto the main context
-  // every frame via drawImage(). Persistence between redraws is the bloom;
-  // it also means shadowBlur — by far the most expensive canvas op here —
-  // runs at a fraction of the field layer's frame rate.
+  // Glow strategy: draw glow particles FLAT into an offscreen buffer every
+  // glowInterval frames, then composite that buffer onto the main context with
+  // ctx.filter='blur(Npx)' applied at drawImage time — one GPU blur pass over
+  // the whole layer instead of N per-particle shadowBlur calls. shadowBlur is
+  // eliminated entirely; the bloom comes from the single composite filter.
+  // Persistence between redraws is the smooth bloom; the blur-radius modulates
+  // with entropy so the halo breathes with entity state.
   draw(ctx, t, state, allowGlow = true) {
-    const { effectiveGlow, adaptiveGlow } = state;
+    const { effectiveGlow, adaptiveGlow, entropy } = state;
     const glowOn = allowGlow && effectiveGlow > 0.05;
 
     // Pass 1 — flat particles, drawn directly every frame.
@@ -151,7 +169,7 @@ export class ParticleSystem {
       if (!(glowOn && p.glow)) this._drawFlat(ctx, p, t, state);
     }
 
-    // Pass 2 — glow particles, composited from the offscreen buffer.
+    // Pass 2 — glow bloom layer, composited from the offscreen buffer.
     if (glowOn) {
       const glowInterval = adaptiveGlow < 0.6 ? 4 : (adaptiveGlow < 0.9 ? 3 : 2);
       if (this._glowFrame <= 0) {
@@ -161,14 +179,18 @@ export class ParticleSystem {
         gctx.clearRect(0, 0, this._glowCanvas.width, this._glowCanvas.height);
         gctx.setTransform(this._dpr, 0, 0, this._dpr, 0, 0);
         for (const p of this._particles) {
-          if (p.glow) this._drawGlow(gctx, p, t, state);
+          if (p.glow) this._drawGlowFlat(gctx, p, t, state);
         }
       }
       this._glowFrame--;
 
+      // Single GPU blur composite — O(1) regardless of glow particle count.
+      const blurPx = Math.round((6 + entropy * 5) * effectiveGlow);
       ctx.save();
       ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.filter = `blur(${blurPx}px)`;
       ctx.drawImage(this._glowCanvas, 0, 0);
+      ctx.filter = 'none';
       ctx.restore();
     }
   }

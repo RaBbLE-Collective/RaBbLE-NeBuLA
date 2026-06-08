@@ -97,9 +97,11 @@ npm run build:iife && cp dist/nebula.iife.js ../RaBbLE-World/world/js/RaBbLE-NeB
 bash ../RaBbLE-Grimoire/spells/dev-serve.sh
 # Starts Aether + NeBuLA watchers and the local CDN mock at http://localhost:8000
 
-bash ../RaBbLE-Grimoire/spells/visual-screenshot.sh --url http://localhost:8000 --delay 5
+bash ../RaBbLE-Grimoire/spells/visual-screenshot.sh --url http://localhost:8000 --playwright --delay 5
+# Headless Chromium — reliable, no window focus juggling, works from any terminal
 # Prints: SCREENSHOT: ~/RaBbLE-Collective/RaBbLE-Captures/visual-TIMESTAMP.png
 # Use Read tool on that path — most LLM agent CLIs can read PNG files directly
+# Omit --playwright to use the Hyprland Firefox+grim method (RaBbLE-OS only)
 ```
 
 Use `--delay 3` for boot animations. See `../RaBbLE-Grimoire/SPELLS.md → visual-screenshot.sh` for full options.
