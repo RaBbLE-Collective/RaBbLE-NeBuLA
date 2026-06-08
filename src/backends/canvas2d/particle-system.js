@@ -17,6 +17,18 @@ export class ParticleSystem {
     this._particleCount = particleCount;
     this._particles     = [];
     this._initParticles();
+
+    // Offscreen glow buffer — Phase 4 compositing.
+    // Glow particles (shadowBlur) redraw into this buffer every N frames;
+    // the buffer is then composited onto the main context every frame via
+    // drawImage(). Persistence between redraws is what produces the smooth
+    // bloom — and it means the expensive shadowBlur pass runs at a fraction
+    // of the field layer's frame rate instead of every frame.
+    this._glowCanvas = document.createElement('canvas');
+    this._glowCanvas.width  = canvas.width;
+    this._glowCanvas.height = canvas.height;
+    this._glowCtx    = this._glowCanvas.getContext('2d');
+    this._glowFrame  = 0;
   }
 
   get particles() { return this._particles; }
@@ -63,6 +75,10 @@ export class ParticleSystem {
     for (const p of this._particles) { p.x += dx; p.y += dy; p.tx += dx; p.ty += dy; }
     while (this._particles.length < this._particleCount) this._particles.push(this._makeParticle(true));
     if (this._particles.length > this._particleCount) this._particles.length = this._particleCount;
+
+    this._glowCanvas.width  = this._canvas.width;
+    this._glowCanvas.height = this._canvas.height;
+    this._glowFrame = 0;
   }
 
   // update() — position integration, always runs every frame
@@ -87,30 +103,73 @@ export class ParticleSystem {
     }
   }
 
+  // Shared per-particle visibility math — used by both the flat and glow passes.
+  _visibility(p, t, state) {
+    const { inBoot, convProg, settleBlend } = state;
+    const dx = p.rx - this._cx, dy = p.ry - this._cy;
+    const d  = Math.sqrt(dx * dx + dy * dy);
+    const falloff = Math.max(0, 1 - d / FALLOFF_RADIUS);
+    const pulse   = 0.62 + 0.38 * Math.sin(p.phase * 2 + t * 0.015);
+    const vis     = inBoot ? Math.min(1, convProg * 3) : 1;
+    return { alpha: p.alpha * falloff * pulse * vis, settleBlend };
+  }
+
+  _drawFlat(ctx, p, t, state) {
+    const { alpha } = this._visibility(p, t, state);
+    ctx.beginPath(); ctx.arc(p.rx, p.ry, p.r, 0, Math.PI * 2);
+    ctx.fillStyle = p.color; ctx.globalAlpha = alpha; ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  _drawGlow(ctx, p, t, state) {
+    const { alpha, settleBlend } = this._visibility(p, t, state);
+    const eGlow = 1 + state.entropy * 1.5;
+    ctx.shadowColor = p.color;
+    ctx.shadowBlur  = (20 + settleBlend * 14 + 7 * Math.sin(p.phase + t * 0.02)) * state.effectiveGlow * eGlow;
+    ctx.beginPath(); ctx.arc(p.rx, p.ry, p.r, 0, Math.PI * 2);
+    ctx.fillStyle = p.color; ctx.globalAlpha = alpha; ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
+  }
+
   // draw() — canvas rendering, always called every frame (no skip = no flicker).
-  // allowGlow: when false, shadowBlur is skipped — particles draw flat.
-  // Dropping glow cuts draw time by ~50-60% with no visible pop.
+  // allowGlow: when false, the offscreen glow pass is skipped entirely and
+  // every particle draws flat — cuts draw time by ~50-60% with no visible pop.
+  //
+  // Glow particles redraw into an offscreen buffer every `glowInterval` frames
+  // (2 normally, ramping to 4 under sustained load — driven by the existing
+  // adaptiveGlow signal) and that buffer is composited onto the main context
+  // every frame via drawImage(). Persistence between redraws is the bloom;
+  // it also means shadowBlur — by far the most expensive canvas op here —
+  // runs at a fraction of the field layer's frame rate.
   draw(ctx, t, state, allowGlow = true) {
-    const { inBoot, convProg, settleBlend, entropy, effectiveGlow } = state;
+    const { effectiveGlow, adaptiveGlow } = state;
+    const glowOn = allowGlow && effectiveGlow > 0.05;
 
+    // Pass 1 — flat particles, drawn directly every frame.
     for (const p of this._particles) {
-      const dx = p.rx - this._cx, dy = p.ry - this._cy;
-      const d  = Math.sqrt(dx * dx + dy * dy);
-      const falloff = Math.max(0, 1 - d / FALLOFF_RADIUS);
-      const pulse   = 0.62 + 0.38 * Math.sin(p.phase * 2 + t * 0.015);
-      const vis     = inBoot ? Math.min(1, convProg * 3) : 1;
-      const a       = p.alpha * falloff * pulse * vis;
+      if (!(glowOn && p.glow)) this._drawFlat(ctx, p, t, state);
+    }
 
-      const useBlur = allowGlow && p.glow && effectiveGlow > 0.05;
-      if (useBlur) {
-        ctx.shadowColor = p.color;
-        const eGlow = 1 + entropy * 1.5;
-        ctx.shadowBlur = (20 + settleBlend * 14 + 7 * Math.sin(p.phase + t * 0.02)) * effectiveGlow * eGlow;
+    // Pass 2 — glow particles, composited from the offscreen buffer.
+    if (glowOn) {
+      const glowInterval = adaptiveGlow < 0.6 ? 4 : (adaptiveGlow < 0.9 ? 3 : 2);
+      if (this._glowFrame <= 0) {
+        this._glowFrame = glowInterval;
+        const gctx = this._glowCtx;
+        gctx.setTransform(1, 0, 0, 1, 0, 0);
+        gctx.clearRect(0, 0, this._glowCanvas.width, this._glowCanvas.height);
+        gctx.setTransform(this._dpr, 0, 0, this._dpr, 0, 0);
+        for (const p of this._particles) {
+          if (p.glow) this._drawGlow(gctx, p, t, state);
+        }
       }
-      ctx.beginPath(); ctx.arc(p.rx, p.ry, p.r, 0, Math.PI * 2);
-      ctx.fillStyle = p.color; ctx.globalAlpha = a; ctx.fill();
-      if (useBlur) ctx.shadowBlur = 0;
-      ctx.globalAlpha = 1;
+      this._glowFrame--;
+
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.drawImage(this._glowCanvas, 0, 0);
+      ctx.restore();
     }
   }
 

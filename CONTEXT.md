@@ -3,8 +3,8 @@
 ```
 epoch: 0 | evolution: 0 | echo: 0 | episode: 1 (in progress)
 version: v0.0.0.0 (targeting v0.0.0.1 at Episode 1 air)
-last session: 2026-05-18 (Session 14)
-status: Ep1 Phases 1–7 complete · Rearchitecture Phases 1–3 done · Phase 4 (glow compositing) next
+last session: 2026-06-08 (Session 53)
+status: Ep1 Phases 1–7 complete · Rearchitecture Phases 1–4 done · Phase 5 (effects systems) next
 ```
 
 RaBbLE-NeBuLA is the Collective's unified rendering engine — entropy-driven, backend-agnostic, built to make RaBbLE's inner state visible as rendered space. Ships as CDN-distributed IIFE + ESM bundles.
@@ -82,7 +82,7 @@ Full plan: `../RaBbLE-Grimoire/RaBbLE-NeBuLA/RaBbLE-NeBuLA-Rearchitecture.md`
 | 1 | Module decomposition — extract canvas2d-backend.js into 6 system files | ✅ Done |
 | 2 | Frame budgeting — EMA cost tracking, graceful degradation under load | ✅ Done |
 | 3 | Spatial hash for connections — O(n × k) replace O(n²) | ✅ Done |
-| 4 | Glow layer compositing — offscreen canvas, every-2-frame bloom | Pending |
+| 4 | Glow layer compositing — offscreen canvas, every-2-frame bloom | ✅ Done |
 | 5 | Effects systems — absorb RaBbLE-bg.js into NeBuLA effect modules | Pending |
 | 6 | World single-page app — WM applets, NeBuLA template pattern | Pending |
 | 7 | Three.js decomposition — same system interface for 3D backend | Pending |

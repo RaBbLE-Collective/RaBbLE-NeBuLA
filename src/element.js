@@ -34,12 +34,23 @@ class RaBbLEEntityElement extends HTMLElement {
     this.style.display  = this.style.display  || 'block';
     this.style.overflow = 'visible';
 
-    this._canvas = document.createElement('canvas');
-    this._canvas.className           = 'rabble-entity-canvas';
-    this._canvas.style.cssText       =
+    // Two stacked canvases — composited by the browser, not by draw order.
+    // Field layer (particles, connections) is the CPU-heavy, throttle-able
+    // bottom layer. Entity layer (eyes, portals) sits above it and always
+    // draws first each frame, so a slow field frame can never delay the eyes.
+    const layerStyle = (z) =>
       'position:absolute;left:50%;top:50%;' +
       'transform:translate(-50%,-50%);' +
-      'pointer-events:none;z-index:0;background:transparent';
+      `pointer-events:none;z-index:${z};background:transparent`;
+
+    this._fieldCanvas  = document.createElement('canvas');
+    this._fieldCanvas.className = 'rabble-entity-canvas rabble-entity-canvas--field';
+    this._fieldCanvas.style.cssText = layerStyle(0);
+    this.appendChild(this._fieldCanvas);
+
+    this._canvas = document.createElement('canvas');
+    this._canvas.className = 'rabble-entity-canvas rabble-entity-canvas--entity';
+    this._canvas.style.cssText = layerStyle(1);
     this.appendChild(this._canvas);
 
     // Mobile performance: cap DPR and reduce glow on high-DPR small screens
@@ -67,10 +78,12 @@ class RaBbLEEntityElement extends HTMLElement {
       const devW = Math.round(cssW * perfDpr);
       const devH = Math.round(cssH * perfDpr);
 
-      if (this._canvas.width  !== devW) this._canvas.width  = devW;
-      if (this._canvas.height !== devH) this._canvas.height = devH;
-      this._canvas.style.width  = cssW + 'px';
-      this._canvas.style.height = cssH + 'px';
+      for (const c of [this._fieldCanvas, this._canvas]) {
+        if (c.width  !== devW) c.width  = devW;
+        if (c.height !== devH) c.height = devH;
+        c.style.width  = cssW + 'px';
+        c.style.height = cssH + 'px';
+      }
 
       if (this._backend) this._backend.resize();
     };
@@ -85,6 +98,7 @@ class RaBbLEEntityElement extends HTMLElement {
     const particleCount = isMobile ? Math.min(220, requested) : requested;
 
     this._backend = new Canvas2dBackend(this._canvas, {
+      fieldCanvas:   this._fieldCanvas,
       mode:          this.getAttribute('mode') || 'idle',
       particleCount,
       transparent:   true,

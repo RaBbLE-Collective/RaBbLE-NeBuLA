@@ -93,9 +93,12 @@ After any canvas or visual change, cast the screenshot spell to see the result:
 # Build + deploy to World
 npm run build:iife && cp dist/nebula.iife.js ../RaBbLE-World/world/js/RaBbLE-NeBuLA.js
 
-# Serve World (separate terminal): cd ../RaBbLE-World && python -m http.server 8000
-bash ../RaBbLE-Grimoire/spells/visual-screenshot.sh --url http://localhost:8000 --close
-# Prints: SCREENSHOT: ~/RaBbLE-screenshots/visual-TIMESTAMP.png
+# Serve everything (separate terminal) — never python -m http.server or raw esbuild watch:
+bash ../RaBbLE-Grimoire/spells/dev-serve.sh
+# Starts Aether + NeBuLA watchers and the local CDN mock at http://localhost:8000
+
+bash ../RaBbLE-Grimoire/spells/visual-screenshot.sh --url http://localhost:8000 --delay 5
+# Prints: SCREENSHOT: ~/RaBbLE-Collective/RaBbLE-Captures/visual-TIMESTAMP.png
 # Use Read tool on that path — most LLM agent CLIs can read PNG files directly
 ```
 

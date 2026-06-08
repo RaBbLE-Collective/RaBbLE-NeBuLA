@@ -13,6 +13,7 @@ export class Canvas2dBackend extends Renderer {
   constructor(canvas, opts = {}) {
     super();
     if (!canvas) throw new Error('Canvas2dBackend requires HTMLCanvasElement');
+    if (!opts.fieldCanvas) throw new Error('Canvas2dBackend requires opts.fieldCanvas');
 
     this._opts = {
       mode:          opts.mode          ?? 'idle',
@@ -25,8 +26,18 @@ export class Canvas2dBackend extends Renderer {
       onReady:       opts.onReady       ?? null,
     };
 
+    // Entity layer (eyes, portals) — top canvas, always drawn first every
+    // frame so a heavy field-layer frame can never delay or skip the eyes.
     this._canvas      = canvas;
     this._ctx         = canvas.getContext('2d');
+
+    // Field layer (particles, connections) — bottom canvas, the CPU-heavy
+    // and throttle-able half of the scene. Composited under the entity layer
+    // by the browser (CSS stacking), so it can be skipped or fall behind
+    // without ever corrupting or delaying the eyes.
+    this._fieldCanvas = opts.fieldCanvas;
+    this._fieldCtx    = this._fieldCanvas.getContext('2d');
+
     this._dpr         = this._opts.dpr;
     this._t           = 0;
     this._rafId       = null;
@@ -86,10 +97,14 @@ export class Canvas2dBackend extends Renderer {
 
   _updateCanvasSize() {
     const rect = this._canvas.getBoundingClientRect();
-    this._canvas.width  = Math.max(1, rect.width)  * this._dpr;
-    this._canvas.height = Math.max(1, rect.height) * this._dpr;
-    this._cx = this._canvas.width  / (2 * this._dpr);
-    this._cy = this._canvas.height * 0.47 / this._dpr;
+    const w = Math.max(1, rect.width)  * this._dpr;
+    const h = Math.max(1, rect.height) * this._dpr;
+    this._canvas.width       = w;
+    this._canvas.height      = h;
+    this._fieldCanvas.width  = w;
+    this._fieldCanvas.height = h;
+    this._cx = w / (2 * this._dpr);
+    this._cy = h * 0.47 / this._dpr;
   }
 
   _preserveParticlesOnResize() {
@@ -181,49 +196,65 @@ export class Canvas2dBackend extends Renderer {
   // ── Draw ───────────────────────────────────────────────────────────────────
 
   _draw(state) {
-    const ctx = this._ctx;
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, this._canvas.width, this._canvas.height);
-    ctx.setTransform(this._dpr, 0, 0, this._dpr, 0, 0);
-
-    if (!this._opts.transparent) {
-      ctx.fillStyle = '#010008';
-      ctx.fillRect(0, 0, this._canvas.width / this._dpr, this._canvas.height / this._dpr);
-    }
-
-    // Reserve budget for always-draw systems (eyes + portals), then budget the rest.
-    // Draw order is back-to-front (particles → connections → portals → eyes).
-    // Priority under load: eyes (always) > portals (always) > connections > particles.
     const budget = this._budget;
     budget.beginFrame();
     let t0;
 
-    // Particles — always draw every frame (no skip = no flicker).
-    // When over budget, shadowBlur is dropped instead (flat particles, no pop).
-    t0 = performance.now();
-    this._particleSystem.draw(ctx, this._t, state, budget.canGlow());
-    budget.record('particles', performance.now() - t0);
+    // ── Entity layer — eyes + portals, drawn FIRST to its own canvas. ────────
+    // Always runs, every frame, before the field layer gets a chance to spend
+    // any time. The browser composites the two canvases on the GPU, so this
+    // layer's correctness and cadence no longer depend on field-layer cost —
+    // a slow particle frame can delay or be skipped without ever touching it.
+    const ectx = this._ctx;
+    ectx.setTransform(1, 0, 0, 1, 0, 0);
+    ectx.clearRect(0, 0, this._canvas.width, this._canvas.height);
+    ectx.setTransform(this._dpr, 0, 0, this._dpr, 0, 0);
 
-    // Connections — binary skip under load (thin lines, acceptable to drop).
-    if (state.hasBooted && budget.canDraw('connections')) {
-      t0 = performance.now();
-      this._connectionSystem.draw(ctx, this._t, state, this._particleSystem.particles);
-      budget.record('connections', performance.now() - t0);
-    }
-
-    // Portals — always draw, measure cost for next-frame budget reservation
     t0 = performance.now();
-    this._portalSystem.draw(ctx, this._t, state);
+    this._portalSystem.draw(ectx, this._t, state);
     budget.record('portals', performance.now() - t0);
 
-    // Eyes — always draw (highest priority), measure cost
     t0 = performance.now();
-    const eyeAlpha = this._eyeSystem.draw(ctx, this._t, state);
+    const eyeAlpha = this._eyeSystem.draw(ectx, this._t, state);
     budget.record('eyes', performance.now() - t0);
 
     if (eyeAlpha !== null && !this._readyCalled && eyeAlpha > 0.95) {
       this._readyCalled = true;
       if (typeof this._opts.onReady === 'function') this._opts.onReady();
+    }
+
+    // ── Field layer — particles + connections, the CPU-heavy half. ───────────
+    // Gated as a whole: when the EMA-predicted cost would blow the frame
+    // budget, the entire layer is skipped for up to 2 consecutive frames and
+    // simply holds its last-painted content (a separate composited canvas, so
+    // this never corrupts or delays the entity layer above it).
+    if (budget.canDraw('field', 2)) {
+      const fctx = this._fieldCtx;
+      const t1   = performance.now();
+
+      fctx.setTransform(1, 0, 0, 1, 0, 0);
+      fctx.clearRect(0, 0, this._fieldCanvas.width, this._fieldCanvas.height);
+      fctx.setTransform(this._dpr, 0, 0, this._dpr, 0, 0);
+
+      if (!this._opts.transparent) {
+        fctx.fillStyle = '#010008';
+        fctx.fillRect(0, 0, this._fieldCanvas.width / this._dpr, this._fieldCanvas.height / this._dpr);
+      }
+
+      // Particles — always draw when the layer runs (no skip = no flicker).
+      // When over budget, shadowBlur is dropped instead (flat particles, no pop).
+      t0 = performance.now();
+      this._particleSystem.draw(fctx, this._t, state, budget.canGlow());
+      budget.record('particles', performance.now() - t0);
+
+      // Connections — binary skip under load (thin lines, acceptable to drop).
+      if (state.hasBooted && budget.canDraw('connections')) {
+        t0 = performance.now();
+        this._connectionSystem.draw(fctx, this._t, state, this._particleSystem.particles);
+        budget.record('connections', performance.now() - t0);
+      }
+
+      budget.record('field', performance.now() - t1);
     }
   }
 
