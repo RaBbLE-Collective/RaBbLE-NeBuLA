@@ -33,6 +33,10 @@ class RaBbLEEntityElement extends HTMLElement {
     this.style.position = this.style.position || 'relative';
     this.style.display  = this.style.display  || 'block';
     this.style.overflow = 'visible';
+    // z-index:1 creates a proper stacking context above AmbientField's fixed z:0 canvases.
+    // Without this, position:relative with no z-index ranks below position:fixed z:0
+    // in CSS paint order, causing AmbientField glow to composite over the entity canvases.
+    if (!this.style.zIndex) this.style.zIndex = '1';
 
     // Three stacked canvases — composited by the browser's GPU compositor.
     // Field (z:0) — flat particles + connections; CPU-heavy, throttle-able.
