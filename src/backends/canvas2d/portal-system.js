@@ -31,9 +31,10 @@ export class PortalSystem {
   }
 
   _drawPortalArc(ctx, t, px, py, col, pW2, pH2, frac, glowCtx) {
-    // Dark fill inside portal
+    // Opaque dark fill inside portal — blocks glowCanvas from showing through.
+    // Opaque edge is intentional: prevents glow bleed coloring the socket interior.
     const grd = ctx.createRadialGradient(px, py, 0, px, py, pW2);
-    grd.addColorStop(0, '#010108'); grd.addColorStop(0.65, '#05050e'); grd.addColorStop(1, 'rgba(1,1,8,0)');
+    grd.addColorStop(0, '#000000'); grd.addColorStop(0.7, '#010108'); grd.addColorStop(1, '#010008');
     ctx.beginPath(); ctx.ellipse(px, py, pW2, pH2, 0, 0, Math.PI * 2);
     ctx.fillStyle = grd; ctx.fill();
     if (frac <= 0) return;
@@ -54,11 +55,11 @@ export class PortalSystem {
     ctx.strokeStyle = col; ctx.lineWidth = 1.8;
     ctx.stroke();
 
-    // Glow arc on CSS-blurred canvas (compositor thread — zero JS cost)
+    // Thin glow arc — narrow lineWidth limits bleed into portal interior
     if (glowCtx) {
       buildArc(glowCtx);
-      glowCtx.strokeStyle = col; glowCtx.lineWidth = 9;
-      glowCtx.globalAlpha = 0.7;
+      glowCtx.strokeStyle = col; glowCtx.lineWidth = 4;
+      glowCtx.globalAlpha = 0.45;
       glowCtx.stroke();
       glowCtx.globalAlpha = 1;
     }
@@ -71,8 +72,8 @@ export class PortalSystem {
       ctx.fillStyle = '#fff'; ctx.fill();
 
       if (glowCtx) {
-        glowCtx.beginPath(); glowCtx.arc(xe, ye, 7, 0, Math.PI * 2);
-        glowCtx.fillStyle = col; glowCtx.globalAlpha = 0.75; glowCtx.fill(); glowCtx.globalAlpha = 1;
+        glowCtx.beginPath(); glowCtx.arc(xe, ye, 4.5, 0, Math.PI * 2);
+        glowCtx.fillStyle = col; glowCtx.globalAlpha = 0.5; glowCtx.fill(); glowCtx.globalAlpha = 1;
       }
     }
   }

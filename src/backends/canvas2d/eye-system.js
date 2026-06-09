@@ -257,7 +257,7 @@ export class EyeSystem {
     }
 
     // Halo gradient (radial fill — cheap, no blur needed)
-    const haloSize = EYE_H * (0.80 + 0.12 * Math.sin(t * 0.022));
+    const haloSize = EYE_H * (0.55 + 0.08 * Math.sin(t * 0.022));
     const hg = ctx.createRadialGradient(ox, oy, 2, ox, oy, haloSize);
     hg.addColorStop(0, col + '38'); hg.addColorStop(1, 'transparent');
     ctx.beginPath(); ctx.ellipse(ox, oy, haloSize, haloSize, 0, 0, Math.PI * 2);
@@ -272,18 +272,18 @@ export class EyeSystem {
     ctx.stroke();
     ctx.restore();
 
-    // Glow on CSS-blurred canvas — shapes drawn larger to compensate for 8px blur spread
-    // Compositor handles the blur on its own thread; zero JS/Skia cost.
+    // Glow on CSS-blurred canvas — shapes drawn slightly larger to compensate for 8px blur spread.
+    // Keep shapes tight to the eye outline so they don't bleed into the portal socket area.
     if (glowCtx) {
       glowCtx.save(); glowCtx.translate(ox, oy); glowCtx.scale(1, bs);
-      // White glow fill (oversized so CSS blur spreads it into a halo)
-      glowCtx.beginPath(); glowCtx.ellipse(0, 0, eW2 + 8, eH2 + 14, 0, 0, Math.PI * 2);
-      glowCtx.fillStyle = 'rgba(220,235,255,0.5)';
+      // Subtle white glow fill
+      glowCtx.beginPath(); glowCtx.ellipse(0, 0, eW2 + 4, eH2 + 7, 0, 0, Math.PI * 2);
+      glowCtx.fillStyle = 'rgba(220,235,255,0.22)';
       glowCtx.fill();
-      // Colored stroke glow
+      // Colored outline glow — thin, stays close to eye edge
       glowCtx.beginPath(); glowCtx.ellipse(0, 0, eW2, eH2, 0, 0, Math.PI * 2);
-      glowCtx.strokeStyle = col; glowCtx.lineWidth = 10;
-      glowCtx.globalAlpha = 0.65;
+      glowCtx.strokeStyle = col; glowCtx.lineWidth = 6;
+      glowCtx.globalAlpha = 0.4;
       glowCtx.stroke();
       glowCtx.globalAlpha = 1;
       glowCtx.restore();
