@@ -34,9 +34,15 @@ class RaBbLEEntityElement extends HTMLElement {
     this.style.display  = this.style.display  || 'block';
     this.style.overflow = 'visible';
     // z-index:1 creates a proper stacking context above AmbientField's fixed z:0 canvases.
-    // Without this, position:relative with no z-index ranks below position:fixed z:0
-    // in CSS paint order, causing AmbientField glow to composite over the entity canvases.
     if (!this.style.zIndex) this.style.zIndex = '1';
+    // isolation:isolate forces all three canvases to composite into an offscreen group
+    // first (respecting internal z-order), then places the result on the page.
+    // Without it, Chrome's GPU compositor promotes the glow canvas (which has CSS
+    // filter:blur) to a separate layer that composites AFTER the entity canvas (z:2)
+    // despite having lower z-index — causing glow bokeh to appear through the opaque
+    // portal fill. isolation:isolate prevents the internal blend modes from bleeding
+    // through to the page backdrop before the group is fully resolved.
+    this.style.isolation = 'isolate';
 
     // Three stacked canvases — composited by the browser's GPU compositor.
     // Field (z:0) — flat particles + connections; CPU-heavy, throttle-able.
