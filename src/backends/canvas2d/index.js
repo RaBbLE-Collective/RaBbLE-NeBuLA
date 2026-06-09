@@ -252,6 +252,7 @@ export class Canvas2dBackend extends Renderer {
 
   setEntityState(state) {
     if (['idle', 'thinking', 'speaking'].includes(state)) {
+      this._currentState = state;
       this._eyeSystem.setEntityState(state);
       window.dispatchEvent(new CustomEvent('rabble:entity-state', { detail: { state } }));
     }
@@ -259,6 +260,39 @@ export class Canvas2dBackend extends Renderer {
 
   setEntropy(val) {
     this._entropy = Math.max(0, Math.min(1, val));
+  }
+
+  // Set eye tuning config (live-applied next frame)
+  setEyeConfig(cfg) {
+    if (this._eyeSystem) this._eyeSystem.setConfig(cfg);
+  }
+
+  // Set particle config (some params live, some require rebuild)
+  setParticleConfig(cfg) {
+    if (!this._particleSystem) return;
+    this._particleSystem.setConfig(cfg);
+    // Rebuild particles if sizeMin/sizeMax changed
+    if (cfg && (cfg.sizeMin !== undefined || cfg.sizeMax !== undefined)) {
+      this._particleSystem.rebuild();
+    }
+  }
+
+  // Toggle portal arcs on/off
+  setPortalVisible(visible) {
+    if (this._portalSystem) this._portalSystem.visible = visible;
+  }
+
+  // Get a serializable snapshot of all tunable config
+  getSnapshot() {
+    return {
+      entityState:   this._currentState || 'idle',
+      entropy:       this._entropy || 0.3,
+      showWaveform:  this._opts && this._opts.showWaveform,
+      interactive:   this._opts && this._opts.interactive,
+      portalVisible: this._portalSystem ? this._portalSystem.visible : true,
+      eye:           this._eyeSystem ? this._eyeSystem.getConfig() : {},
+      particle:      this._particleSystem ? this._particleSystem.getConfig() : {},
+    };
   }
 
   triggerBoot() { this._startBoot(); }

@@ -8,6 +8,7 @@ export class PortalSystem {
   constructor({ glowScale }) {
     this._glowScale = glowScale;
     this._cx = 0; this._cy = 0;
+    this.visible = true;
   }
 
   resize(cx, cy) {
@@ -17,6 +18,7 @@ export class PortalSystem {
   update() {}
 
   draw(ctx, t, state, glowCtx) {
+    if (!this.visible) return;
     const { inBoot, bootSeq } = state;
     if (inBoot && bootSeq.timeline <= bootSeq.T_PORTALS_START) return;
 

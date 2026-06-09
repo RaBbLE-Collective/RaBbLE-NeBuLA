@@ -7,7 +7,6 @@ const PARTICLE_COLORS = [
 ];
 
 const NEBULA_RADIUS = 130, FALLOFF_RADIUS = 155;
-const GLOW_FRACTION = 0.12;
 
 export class ParticleSystem {
   constructor({ cx, cy, canvas, dpr, particleCount, glowCanvas }) {
@@ -17,6 +16,15 @@ export class ParticleSystem {
     this._dpr           = dpr;
     this._particleCount = particleCount;
     this._particles     = [];
+
+    this.cfg = {
+      glowFraction: 0.12,         // fraction of particles that get glow canvas
+      orbitSpeedMultiplier: 1.0,  // multiplies per-particle speed during orbit
+      sizeMin: 0.8,               // minimum particle size in px
+      sizeMax: 11.8,              // maximum particle size in px
+      bloomRadius: 6,             // base CSS blur radius in px (on glow canvas)
+    };
+
     this._initParticles();
 
     // Glow buffer — externally managed (DOM canvas with CSS blur) or owned offscreen.
@@ -35,12 +43,32 @@ export class ParticleSystem {
 
   get particles() { return this._particles; }
 
+  setConfig(cfg) {
+    if (!cfg) return;
+    if (cfg.glowFraction !== undefined) this.cfg.glowFraction = cfg.glowFraction;
+    if (cfg.orbitSpeedMultiplier !== undefined) this.cfg.orbitSpeedMultiplier = cfg.orbitSpeedMultiplier;
+    if (cfg.sizeMin !== undefined) this.cfg.sizeMin = cfg.sizeMin;
+    if (cfg.sizeMax !== undefined) this.cfg.sizeMax = cfg.sizeMax;
+    if (cfg.bloomRadius !== undefined) this.cfg.bloomRadius = cfg.bloomRadius;
+  }
+
+  getConfig() {
+    return JSON.parse(JSON.stringify(this.cfg));
+  }
+
+  // rebuild() — re-initializes all particles with current cfg values.
+  // Note: sizeMin/sizeMax changes only take effect when particles are rebuilt.
+  rebuild(count) {
+    if (count !== undefined) this._particleCount = count;
+    this._initParticles();
+  }
+
   _makeParticle(atTarget = false) {
     const a  = Math.random() * Math.PI * 2;
     const r  = Math.pow(Math.random(), 0.52) * NEBULA_RADIUS;
     const tx = this._cx + r * Math.cos(a);
     const ty = this._cy + r * Math.sin(a) * 0.80;
-    const sz = Math.random() * 11 + 0.8;
+    const sz = Math.random() * (this.cfg.sizeMax - this.cfg.sizeMin) + this.cfg.sizeMin;
     return {
       x:     atTarget ? tx : this._cx + (Math.random() - 0.5) * (this._canvas.width  / this._dpr) * 2.4,
       y:     atTarget ? ty : this._cy + (Math.random() - 0.5) * (this._canvas.height / this._dpr) * 2.2,
@@ -51,7 +79,7 @@ export class ParticleSystem {
       phase: Math.random() * Math.PI * 2,
       speed: Math.random() * 0.011 + 0.004,
       cs:    Math.random() * 0.032 + 0.012,
-      glow:  Math.random() < GLOW_FRACTION,
+      glow:  Math.random() < this.cfg.glowFraction,
     };
   }
 
@@ -104,7 +132,7 @@ export class ParticleSystem {
         p.x += (p.tx - p.x) * (p.cs * (1 - settleBlend) * 0.3) + Math.sin(p.phase * 0.7 + t * 0.003) * sd * 0.5;
         p.y += (p.ty - p.y) * (p.cs * (1 - settleBlend) * 0.3) + Math.cos(p.phase * 0.9 + t * 0.002) * sd * 0.35;
       }
-      p.phase += p.speed * (0.7 + settleBlend * 0.5) * eMul;
+      p.phase += p.speed * (0.7 + settleBlend * 0.5) * eMul * this.cfg.orbitSpeedMultiplier;
 
       const driftAmt = (0.6 + settleBlend * 2.4) * eMul;
       p.rx = p.x + Math.sin(p.phase + t * 0.008 * eMul) * driftAmt;
@@ -197,7 +225,7 @@ export class ParticleSystem {
           }
         }
         this._glowFrame--;
-        const blurPx = Math.round((6 + entropy * 5) * effectiveGlow);
+        const blurPx = Math.round((this.cfg.bloomRadius + entropy * 5) * effectiveGlow);
         ctx.save();
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.filter = `blur(${blurPx}px)`;

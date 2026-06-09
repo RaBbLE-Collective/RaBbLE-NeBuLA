@@ -20,11 +20,26 @@ export class EyeSystem {
     this._showWaveform = showWaveform;
     this._entityState  = 'idle';
 
+    this.cfg = {
+      saccadeMode: 'normal',       // 'calm' | 'normal' | 'alert' | 'chaotic'
+      blinkIntervalFrames: 100,    // base blink interval (added to rand(0-150))
+      distractionFreqFrames: 120,  // base distraction interval (added to rand(0-180))
+      joltDecay: 0.94,             // per-frame jolt decay factor
+      snapDecay: 0.92,             // per-frame snap decay factor
+      springStrength: 0.12,        // eye spring pull to target
+      dampingFactor: 0.72,         // velocity damping
+      waveform: {
+        idle:     { amplitude: 2.0, frequency: 0.09, speed: 0.005 },
+        thinking: { amplitude: 4.5, frequency: 0.13, speed: 0.007 },
+        speaking: { amplitude: 7.5, frequency: 0.20, speed: 0.011 },
+      },
+    };
+
     // Blink FSM: 0=wait, 1=opening, 2=burst, 3=normal
     this._blinkMachine    = 3;
     this._blinkT          = 0;
     this._blinkPhase      = 0;
-    this._nextBlink       = 100 + Math.random() * 150;
+    this._nextBlink       = this.cfg.blinkIntervalFrames + Math.random() * 150;
     this._eyeOpenProgress = 1;
     this._burstCount      = 0;
     this._burstGap        = 8;
@@ -40,9 +55,50 @@ export class EyeSystem {
     this._distractCurX = 0; this._distractCurY = 0;
     this._distractVelX = 0; this._distractVelY = 0;
     this._distractReturnAt = 0;
-    this._nextDistraction  = 120 + Math.random() * 180;
+    this._nextDistraction  = this.cfg.distractionFreqFrames + Math.random() * 180;
 
     this._mouseX = -9999; this._mouseY = -9999;
+  }
+
+  setConfig(cfg) {
+    if (!cfg) return;
+    if (cfg.saccadeMode !== undefined) this.cfg.saccadeMode = cfg.saccadeMode;
+    if (cfg.blinkIntervalFrames !== undefined) this.cfg.blinkIntervalFrames = cfg.blinkIntervalFrames;
+    if (cfg.distractionFreqFrames !== undefined) this.cfg.distractionFreqFrames = cfg.distractionFreqFrames;
+    if (cfg.joltDecay !== undefined) this.cfg.joltDecay = cfg.joltDecay;
+    if (cfg.snapDecay !== undefined) this.cfg.snapDecay = cfg.snapDecay;
+    if (cfg.springStrength !== undefined) this.cfg.springStrength = cfg.springStrength;
+    if (cfg.dampingFactor !== undefined) this.cfg.dampingFactor = cfg.dampingFactor;
+    if (cfg.waveform) {
+      if (cfg.waveform.idle)     Object.assign(this.cfg.waveform.idle,     cfg.waveform.idle);
+      if (cfg.waveform.thinking) Object.assign(this.cfg.waveform.thinking, cfg.waveform.thinking);
+      if (cfg.waveform.speaking) Object.assign(this.cfg.waveform.speaking, cfg.waveform.speaking);
+    }
+  }
+
+  getConfig() {
+    return JSON.parse(JSON.stringify(this.cfg));
+  }
+
+  _getSaccadeDistribution(sacc) {
+    const mode = this.cfg.saccadeMode;
+    if (mode === 'calm') {
+      return sacc.filter(function(item) { return item[2] === 'soft'; });
+    }
+    if (mode === 'alert') {
+      // 80% hard/med, 20% soft — build weighted list
+      const hardMed = sacc.filter(function(item) { return item[2] === 'hard' || item[2] === 'med'; });
+      const soft    = sacc.filter(function(item) { return item[2] === 'soft'; });
+      const pool = [];
+      for (let i = 0; i < 4; i++) { for (let j = 0; j < hardMed.length; j++) pool.push(hardMed[j]); }
+      for (let j = 0; j < soft.length; j++) pool.push(soft[j]);
+      return pool;
+    }
+    if (mode === 'chaotic') {
+      return sacc.filter(function(item) { return item[2] === 'hard'; });
+    }
+    // 'normal' — unchanged original list
+    return sacc;
   }
 
   get blinkMachine()    { return this._blinkMachine; }
@@ -110,23 +166,26 @@ export class EyeSystem {
     ];
 
     if (t > this._holdUntil && t > this._nextSaccade) {
-      const item = SACC[Math.floor(Math.random() * SACC.length)];
+      const pool = this._getSaccadeDistribution(SACC);
+      const item = pool[Math.floor(Math.random() * pool.length)];
       const kind = item[2];
       this._saccadeX = item[0]; this._saccadeY = item[1];
-      const hd = kind === 'hard' ? 25 + Math.random() * 35 : kind === 'med' ? 45 + Math.random() * 55 : 65 + Math.random() * 80;
-      const gd = kind === 'hard' ? 8  + Math.random() * 18 : kind === 'med' ? 20 + Math.random() * 40 : 40 + Math.random() * 70;
+      // chaotic mode: shorter hold and gap
+      const chaotic = this.cfg.saccadeMode === 'chaotic';
+      const hd = chaotic ? 8 + Math.random() * 12 : kind === 'hard' ? 25 + Math.random() * 35 : kind === 'med' ? 45 + Math.random() * 55 : 65 + Math.random() * 80;
+      const gd = chaotic ? 2 + Math.random() * 6  : kind === 'hard' ? 8  + Math.random() * 18 : kind === 'med' ? 20 + Math.random() * 40 : 40 + Math.random() * 70;
       this._holdUntil = t + hd; this._nextSaccade = this._holdUntil + gd;
     }
 
-    if (this._joltDecay > 0.01) { this._joltDecay *= 0.94; } else { this._joltX = 0; this._joltY = 0; this._joltDecay = 0; }
-    if (this._snapDecay > 0.01) { this._snapDecay *= 0.92; } else { this._snapX = 0; this._snapY = 0; this._snapDecay = 0; }
+    if (this._joltDecay > 0.01) { this._joltDecay *= this.cfg.joltDecay; } else { this._joltX = 0; this._joltY = 0; this._joltDecay = 0; }
+    if (this._snapDecay > 0.01) { this._snapDecay *= this.cfg.snapDecay; } else { this._snapX = 0; this._snapY = 0; this._snapDecay = 0; }
 
     if (t > this._nextDistraction) {
       const da = Math.random() * Math.PI * 2, reach = 0.45 + Math.random() * 0.55;
       this._distractX = Math.cos(da) * MAX_OFF * reach;
       this._distractY = Math.sin(da) * MAX_OFF * 0.72 * reach;
       this._distractReturnAt = t + 55 + Math.random() * 105;
-      this._nextDistraction  = this._distractReturnAt + 170 + Math.random() * 300;
+      this._nextDistraction  = this._distractReturnAt + this.cfg.distractionFreqFrames + Math.random() * 180;
     }
     if (this._distractReturnAt && t > this._distractReturnAt) { this._distractX = 0; this._distractY = 0; }
     const ds = this._distractReturnAt && t <= this._distractReturnAt ? 0.018 : 0.026;
@@ -155,9 +214,9 @@ export class EyeSystem {
       rawY = this._saccadeY * MAX_OFF * 0.65 + d1y + trY + this._distractCurY + this._snapY * this._snapDecay + this._joltY * MAX_OFF * 1.6 * this._joltDecay;
     }
 
-    const spring = mouseNear ? 0.14 : 0.10;
-    this._eyeVelX = (this._eyeVelX + (rawX - this._eyeCurX) * spring) * 0.72;
-    this._eyeVelY = (this._eyeVelY + (rawY - this._eyeCurY) * spring) * 0.72;
+    const spring = mouseNear ? this.cfg.springStrength * 1.167 : this.cfg.springStrength * 0.833;
+    this._eyeVelX = (this._eyeVelX + (rawX - this._eyeCurX) * spring) * this.cfg.dampingFactor;
+    this._eyeVelY = (this._eyeVelY + (rawY - this._eyeCurY) * spring) * this.cfg.dampingFactor;
     this._eyeCurX += this._eyeVelX; this._eyeCurY += this._eyeVelY;
   }
 
@@ -193,7 +252,7 @@ export class EyeSystem {
       this._blinkT = Math.max(0, Math.min(1, Math.abs(Math.sin(this._blinkPhase * Math.PI))));
       if (this._blinkPhase >= 1) {
         this._blinkPhase = 0; this._blinkT = 0;
-        this._nextBlink = t + 100 + Math.random() * 150;
+        this._nextBlink = t + this.cfg.blinkIntervalFrames + Math.random() * 150;
       }
     }
   }
@@ -294,9 +353,10 @@ export class EyeSystem {
 
   _drawWaveform(ctx, t, alpha, glowCtx) {
     const breathe = 1.2 + 0.8 * Math.sin(t * 0.018);
-    const amp  = (this._entityState === 'speaking' ? 7.5 : this._entityState === 'thinking' ? 4.5 : 2.0) * breathe;
-    const freq = this._entityState === 'speaking' ? 0.2 : this._entityState === 'thinking' ? 0.13 : 0.09;
-    const spd  = this._entityState === 'speaking' ? 0.011 : this._entityState === 'thinking' ? 0.007 : 0.005;
+    const wfState = this.cfg.waveform[this._entityState] || this.cfg.waveform.idle;
+    const amp  = wfState.amplitude * breathe;
+    const freq = wfState.frequency;
+    const spd  = wfState.speed;
     const wy = this._cy + 68, wx0 = this._cx - 64, wx1 = this._cx + 64;
 
     [[palette.magenta, 0], [palette.cyan, Math.PI]].forEach(([col, ph]) => {

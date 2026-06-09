@@ -179,6 +179,22 @@ class RaBbLEEntityElement extends HTMLElement {
   resume() {
     if (this._backend) this._backend.resume();
   }
+
+  setEyeConfig(cfg) {
+    if (this._backend) this._backend.setEyeConfig(cfg);
+  }
+
+  setParticleConfig(cfg) {
+    if (this._backend) this._backend.setParticleConfig(cfg);
+  }
+
+  setPortalVisible(visible) {
+    if (this._backend) this._backend.setPortalVisible(visible);
+  }
+
+  getSnapshot() {
+    return this._backend ? this._backend.getSnapshot() : null;
+  }
 }
 
 if (typeof customElements !== 'undefined' && !customElements.get('rabble-entity')) {
