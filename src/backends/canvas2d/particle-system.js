@@ -18,7 +18,10 @@ export class ParticleSystem {
     this._particles     = [];
 
     this.cfg = {
-      glowFraction: 0.12,         // fraction of particles that get glow canvas
+      glowFraction: 0.42,         // fraction of particles that get glow canvas
+                                  // (matches the deployed reference ~45% — the
+                                  //  soft overlapping haze that makes the nebula
+                                  //  read as one cohesive cloud, not crisp bokeh)
       orbitSpeedMultiplier: 1.0,  // multiplies per-particle speed during orbit
       sizeMin: 0.8,               // minimum particle size in px
       sizeMax: 11.8,              // maximum particle size in px

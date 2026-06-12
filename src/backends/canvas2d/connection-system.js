@@ -1,15 +1,18 @@
-// Connection tuning
+// Connection tuning — radius-based "synapse" mesh.
+//
+// Restored from the deployed reference renderer (the look on joinrabble.world):
+// every particle pair within `connDist` gets a line whose alpha fades with
+// distance and whose colour is inherited from the source particle. This is what
+// gives the nebula its dense, living-brain feel — far richer than a sparse
+// flat-blue K-nearest graph.
+//
+// Cost is kept in budget by stepping every other particle (STEP = 2): the pair
+// count drops to ≈ (n/2)² while the visual density is indistinguishable, and the
+// backend gates the whole field layer through FrameBudget on slow frames.
+const STEP = 2;
+
+// Boot connection loop — spatial hash so the growing-radius check stays O(n×k).
 const MAX_DRAWN_CONNECTIONS = 200;
-
-// Post-boot topology — sparse "neural" web rather than dense radius-clustering.
-// Each particle links to its K nearest neighbors (by stable target position),
-// producing an organic synapse-like graph that stays sparse regardless of
-// local particle density — the "living brain" feel at a fraction of the link
-// count (and draw cost) of the old radius-capped approach.
-const NEAREST_NEIGHBORS     = 2;
-const MAX_PRECOMPUTED_LINKS = 320;
-
-// Spatial hash constants for boot connection loop
 const HASH_CELL_SIZE        = 100;   // slightly larger than max boot connDist (82px)
 const HASH_REBUILD_INTERVAL = 4;     // frames between hash rebuilds
 
@@ -35,62 +38,22 @@ class SpatialHash {
 
 export class ConnectionSystem {
   constructor() {
-    this._links = [];
-    this._bootHash = null;
+    this._bootHash    = null;
     this._bootHashAge = 0;
   }
 
-  get links() { return this._links; }
-
-  // Rebuild pre-computed link topology from particle target positions.
-  // Called after init and after resize — O(n² log n) but happens once, not
-  // per-frame, and n is small (≤300) so this is sub-millisecond.
-  //
-  // Each particle finds its K nearest neighbors by target position (stable
-  // across frames — no per-frame recompute needed) and links to them, with
-  // duplicate pairs (i links j, j also nearest to i) collapsed. The result
-  // is a sparse, evenly-distributed synapse graph — "living brain" rather
-  // than a dense mesh that clumps wherever particles happen to cluster.
-  rebuild(particles) {
-    const n = particles.length;
-    const seen  = new Set();
-    const links = [];
-
-    for (let i = 0; i < n; i++) {
-      const dists = [];
-      for (let j = 0; j < n; j++) {
-        if (j === i) continue;
-        const dx = particles[i].tx - particles[j].tx;
-        const dy = particles[i].ty - particles[j].ty;
-        dists.push([dx * dx + dy * dy, j]);
-      }
-      dists.sort((a, b) => a[0] - b[0]);
-
-      for (let k = 0; k < NEAREST_NEIGHBORS && k < dists.length; k++) {
-        const j = dists[k][1];
-        const a = Math.min(i, j), b = Math.max(i, j);
-        const key = a * n + b;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        links.push({ a, b });
-        if (links.length >= MAX_PRECOMPUTED_LINKS) { this._links = links; return; }
-      }
-    }
-    this._links = links;
-  }
-
+  // Radius mesh is evaluated live each frame — no precomputed topology to keep.
+  rebuild() {}
   update() {}
 
-  // draw() — can be deferred by FrameBudget (priority: after eyes and portals)
-  //
-  // Boot: spatial hash O(n×k) check with growing radius + cap.
-  // Post-boot: pre-computed links, O(MAX_PRECOMPUTED_LINKS) per frame.
+  // draw() — can be deferred by FrameBudget (priority: after eyes and portals).
+  // Particle render positions are read from rx/ry (drift already baked in by
+  // ParticleSystem.update), so connections track exactly what the dots draw.
   draw(ctx, _t, state, particles) {
     const { inBoot, convProg, settleBlend, entropy } = state;
 
     if (inBoot) {
-      // connProgress blends convergence and settle — connections appear early
-      // during convergence and strengthen through settle
+      // During convergence connections appear early and strengthen through settle.
       const connProgress = Math.max(convProg * 0.5, settleBlend);
       if (connProgress < 0.05) return;
 
@@ -100,7 +63,6 @@ export class ConnectionSystem {
       const connDist  = 35 + connProgress * 47;
       const connDist2 = connDist * connDist;
 
-      // Rebuild spatial hash every HASH_REBUILD_INTERVAL frames
       if (this._bootHash === null || this._bootHashAge >= HASH_REBUILD_INTERVAL) {
         if (this._bootHash === null) this._bootHash = new SpatialHash(HASH_CELL_SIZE);
         this._bootHash.clear();
@@ -114,9 +76,6 @@ export class ConnectionSystem {
 
       let drawn = 0;
       ctx.lineWidth = 0.4;
-      ctx.strokeStyle = '#3377ee';
-      ctx.globalAlpha = connAlpha;
-      ctx.beginPath();
       for (let i = 0; i < particles.length && drawn < MAX_DRAWN_CONNECTIONS; i++) {
         const pi = particles[i];
         const nearby = this._bootHash.neighbors(pi.rx, pi.ry);
@@ -124,29 +83,42 @@ export class ConnectionSystem {
           if (j <= i) continue;
           const pj = particles[j];
           const dx = pi.rx - pj.rx, dy = pi.ry - pj.ry;
-          if (dx * dx + dy * dy < connDist2) {
+          const d2 = dx * dx + dy * dy;
+          if (d2 < connDist2) {
+            const dist = Math.sqrt(d2);
+            ctx.beginPath();
             ctx.moveTo(pi.rx, pi.ry); ctx.lineTo(pj.rx, pj.ry);
+            ctx.strokeStyle = pi.color;
+            ctx.globalAlpha = connAlpha * (1 - dist / connDist);
+            ctx.stroke();
             drawn++;
             if (drawn >= MAX_DRAWN_CONNECTIONS) break;
           }
         }
       }
-      ctx.stroke();
       ctx.globalAlpha = 1;
     } else {
-      if (!this._links.length) return;
-      const connAlpha = 0.13 + entropy * 0.12;
+      // Post-boot idle — dense radius mesh, per-particle colour, distance fade.
+      const baseAlpha = settleBlend * 0.13 + entropy * 0.12;
+      const connDist  = 62 + settleBlend * 20;   // 82px once fully settled
+      const connDist2 = connDist * connDist;
+      const pts = particles;
       ctx.lineWidth = 0.4;
-      ctx.strokeStyle = '#3377ee';
-      ctx.globalAlpha = connAlpha;
-      ctx.beginPath();
-      for (let k = 0; k < this._links.length; k++) {
-        const { a, b } = this._links[k];
-        const pi = particles[a], pj = particles[b];
-        if (!pi || !pj) continue;
-        ctx.moveTo(pi.rx, pi.ry); ctx.lineTo(pj.rx, pj.ry);
+      for (let a = 0; a < pts.length; a += STEP) {
+        const pa = pts[a];
+        for (let b = a + STEP; b < pts.length; b += STEP) {
+          const pb = pts[b];
+          const dx = pa.rx - pb.rx, dy = pa.ry - pb.ry;
+          const d2 = dx * dx + dy * dy;
+          if (d2 >= connDist2) continue;
+          const dist = Math.sqrt(d2);
+          ctx.beginPath();
+          ctx.moveTo(pa.rx, pa.ry); ctx.lineTo(pb.rx, pb.ry);
+          ctx.strokeStyle = pa.color;
+          ctx.globalAlpha = baseAlpha * (1 - dist / connDist);
+          ctx.stroke();
+        }
       }
-      ctx.stroke();
       ctx.globalAlpha = 1;
     }
   }

@@ -1,6 +1,7 @@
 import { Renderer } from '../renderer.js';
 import { BootSequence } from '../../core/boot-sequence.js';
 import { ParticleSystem } from './particle-system.js';
+import { ConnectionSystem } from './connection-system.js';
 import { PortalSystem } from './portal-system.js';
 import { EyeSystem } from './eye-system.js';
 import { FrameBudget } from './frame-budget.js';
@@ -70,6 +71,8 @@ export class Canvas2dBackend extends Renderer {
       particleCount: this._opts.particleCount,
       glowCanvas: this._glowCanvas,
     });
+
+    this._connectionSystem = new ConnectionSystem();
 
     this._portalSystem = new PortalSystem({ glowScale: this._opts.glowScale });
     this._portalSystem.resize(this._cx, this._cy);
@@ -243,6 +246,12 @@ export class Canvas2dBackend extends Renderer {
       t0 = performance.now();
       this._particleSystem.draw(fctx, this._t, state, budget.canGlow());
       budget.record('particles', performance.now() - t0);
+
+      // Connection mesh — drawn over the flat particles on the same field canvas
+      // so it sits behind the eyes/portals (which live on the entity canvas).
+      t0 = performance.now();
+      this._connectionSystem.draw(fctx, this._t, state, this._particleSystem.particles);
+      budget.record('connections', performance.now() - t0);
 
       budget.record('field', performance.now() - t1);
     }
