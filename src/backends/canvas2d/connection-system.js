@@ -57,7 +57,7 @@ export class ConnectionSystem {
       const connProgress = Math.max(convProg * 0.5, settleBlend);
       if (connProgress < 0.05) return;
 
-      const connAlpha = connProgress * 0.13;
+      const connAlpha = connProgress * 0.15;
       // Radius grows with convergence: 35→82px. While scattered, few pairs
       // qualify at 35px so the hash lookup exits almost immediately.
       const connDist  = 35 + connProgress * 47;
@@ -75,7 +75,7 @@ export class ConnectionSystem {
       }
 
       let drawn = 0;
-      ctx.lineWidth = 0.4;
+      ctx.lineWidth = 0.55;
       for (let i = 0; i < particles.length && drawn < MAX_DRAWN_CONNECTIONS; i++) {
         const pi = particles[i];
         const nearby = this._bootHash.neighbors(pi.rx, pi.ry);
@@ -99,11 +99,14 @@ export class ConnectionSystem {
       ctx.globalAlpha = 1;
     } else {
       // Post-boot idle — dense radius mesh, per-particle colour, distance fade.
-      const baseAlpha = settleBlend * 0.13 + entropy * 0.12;
+      // Squared distance fade (f*f) concentrates opacity on close pairs so the
+      // synapses read as crisp short links rather than a uniform faint haze —
+      // a denser, more legible "living brain" graph.
+      const baseAlpha = settleBlend * 0.18 + entropy * 0.14;
       const connDist  = 62 + settleBlend * 20;   // 82px once fully settled
       const connDist2 = connDist * connDist;
       const pts = particles;
-      ctx.lineWidth = 0.4;
+      ctx.lineWidth = 0.55;
       for (let a = 0; a < pts.length; a += STEP) {
         const pa = pts[a];
         for (let b = a + STEP; b < pts.length; b += STEP) {
@@ -112,10 +115,11 @@ export class ConnectionSystem {
           const d2 = dx * dx + dy * dy;
           if (d2 >= connDist2) continue;
           const dist = Math.sqrt(d2);
+          const f = 1 - dist / connDist;
           ctx.beginPath();
           ctx.moveTo(pa.rx, pa.ry); ctx.lineTo(pb.rx, pb.ry);
           ctx.strokeStyle = pa.color;
-          ctx.globalAlpha = baseAlpha * (1 - dist / connDist);
+          ctx.globalAlpha = baseAlpha * f * f;
           ctx.stroke();
         }
       }

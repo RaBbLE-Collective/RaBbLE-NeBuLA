@@ -61,7 +61,7 @@ class RaBbLEEntityElement extends HTMLElement {
 
     this._glowCanvas = document.createElement('canvas');
     this._glowCanvas.className = 'rabble-entity-canvas rabble-entity-canvas--glow';
-    this._glowCanvas.style.cssText = layerStyle(1) + ';filter:blur(8px)';
+    this._glowCanvas.style.cssText = layerStyle(1) + ';filter:blur(5px)';
     this.appendChild(this._glowCanvas);
 
     this._canvas = document.createElement('canvas');

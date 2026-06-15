@@ -12,8 +12,11 @@ import { BootSequence } from '../core/boot-sequence.js';
 import { palette, hexToNormalizedRgb } from '../puppet/palette.js';
 
 const MAX_INSTANCES = 4096;
-const BODY_COUNT = 2000;
-const AURA_COUNT = 600;
+// Density tuned down from 2000/600 — the dense cloud read as a solid blob and
+// buried the eyes. Fewer, smaller, additively-blended particles give an airy
+// luminous nebula you can see the eyes through.
+const BODY_COUNT = 650;
+const AURA_COUNT = 220;
 
 export class ThreeJsBackend extends Renderer {
   constructor(canvas, opts = {}) {
@@ -176,8 +179,13 @@ export class ThreeJsBackend extends Renderer {
 
     // Body particles — instanced spheres
     const bodyGeom = new THREE.SphereGeometry(0.5, 8, 8);
+    // Additive blending — overlapping particles add light (glowing gas) instead of
+    // stacking as opaque plastic spheres. This is what makes the cloud read as a
+    // nebula rather than a solid mass.
     const bodyMat = new THREE.MeshBasicMaterial({
       transparent: true,
+      opacity: 0.55,
+      blending: THREE.AdditiveBlending,
       depthWrite: false,
     });
 
@@ -185,7 +193,15 @@ export class ThreeJsBackend extends Renderer {
     this._bodyMesh.frustumCulled = false;
     this._bodyMesh.count = BODY_COUNT;
 
-    // Per-instance color
+    // Per-instance color — driven by the RaBbLE palette (no raw hex).
+    // Core is violet, fading to electric cyan at the rim, with hot-magenta and
+    // white-spark accents. This is the signature neon identity, not the old
+    // muted purple→blue ramp.
+    const violet = hexToNormalizedRgb(palette.violet);   // #bf5fff
+    const cyan   = hexToNormalizedRgb(palette.cyan);      // #00f5ff
+    const magenta = hexToNormalizedRgb(palette.magenta);  // #ff2d78
+    const spark  = { r: 0.86, g: 0.92, b: 1.0 };          // white-blue highlight
+
     const bodyColors = new Float32Array(BODY_COUNT * 3);
     this._bodyData = [];
 
@@ -199,16 +215,16 @@ export class ThreeJsBackend extends Renderer {
       const y = r * Math.sin(phi) * Math.sin(theta);
       const z = r * Math.cos(phi);
 
-      // Purple inner → blue outer
-      let cr = 0.545 + (0.231 - 0.545) * normDist;
-      let cg = 0.361 + (0.510 - 0.361) * normDist;
-      let cb = 0.965;
+      // Violet core → cyan rim
+      let cr = violet.r + (cyan.r - violet.r) * normDist;
+      let cg = violet.g + (cyan.g - violet.g) * normDist;
+      let cb = violet.b + (cyan.b - violet.b) * normDist;
 
       const rnd = Math.random();
-      if (rnd < 0.10) { cr = 0.85; cg = 0.90; cb = 1.0; }
-      else if (rnd < 0.22) { cr = 0.18; cg = 0.12; cb = 0.35; }
+      if (rnd < 0.12)      { cr = spark.r;   cg = spark.g;   cb = spark.b; }
+      else if (rnd < 0.26) { cr = magenta.r; cg = magenta.g; cb = magenta.b; }
 
-      const s = 0.06 + Math.random() * 0.18;
+      const s = 0.035 + Math.random() * 0.10;
       const opacity = 0.7 - normDist * 0.3;
 
       bodyColors[i * 3] = cr;
@@ -225,6 +241,8 @@ export class ThreeJsBackend extends Renderer {
     const auraGeom = new THREE.SphereGeometry(0.5, 6, 6);
     const auraMat = new THREE.MeshBasicMaterial({
       transparent: true,
+      opacity: 0.35,
+      blending: THREE.AdditiveBlending,
       depthWrite: false,
     });
 
@@ -235,15 +253,16 @@ export class ThreeJsBackend extends Renderer {
     const auraColors = new Float32Array(AURA_COUNT * 3);
     this._auraData = [];
 
+    // Palette-driven aura tints — violet / cyan / magenta / white spark.
     const auraColorOptions = [
-      [0.545, 0.361, 0.965],
-      [0.231, 0.510, 0.965],
-      [0.024, 0.714, 0.831],
-      [0.85, 0.90, 1.0],
+      [violet.r,  violet.g,  violet.b],
+      [cyan.r,    cyan.g,    cyan.b],
+      [magenta.r, magenta.g, magenta.b],
+      [0.86,      0.92,      1.0],
     ];
 
     for (let i = 0; i < AURA_COUNT; i++) {
-      const r = 2.0 + Math.random() * 5.0;
+      const r = 2.2 + Math.random() * 4.0;
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.acos(2 * Math.random() - 1);
 
@@ -251,7 +270,7 @@ export class ThreeJsBackend extends Renderer {
       const y = r * Math.sin(phi) * Math.sin(theta);
       const z = r * Math.cos(phi);
 
-      const s = 0.04 + Math.random() * 0.12;
+      const s = 0.025 + Math.random() * 0.07;
       const opacity = 0.2 + Math.random() * 0.4;
       const color = auraColorOptions[Math.floor(Math.random() * auraColorOptions.length)];
 
@@ -420,63 +439,95 @@ export class ThreeJsBackend extends Renderer {
       transparent: true,
       opacity: 0.95,
       side: THREE.DoubleSide,
+      depthTest: false,
       depthWrite: false,
     });
+    portalMat.userData.baseOpacity = 0.95;
 
     this._leftPortal = new THREE.Mesh(portalGeom, portalMat.clone());
     this._rightPortal = new THREE.Mesh(portalGeom, portalMat.clone());
+    this._leftPortal.renderOrder = 10; this._rightPortal.renderOrder = 10;
     // Reference portrait: cyan (left) eye's portal sits above it, magenta (right) eye's below
     this._leftPortal.position.set(eyeConfig.leftPos.x, eyeConfig.leftPos.y + 0.15, eyeConfig.leftPos.z - 0.02);
     this._rightPortal.position.set(eyeConfig.rightPos.x, eyeConfig.rightPos.y - 0.15, eyeConfig.rightPos.z - 0.02);
     this._eyeGroup.add(this._leftPortal);
     this._eyeGroup.add(this._rightPortal);
 
-    // Eye white meshes (glowing ellipses)
-    const eyeGeom = new THREE.ShapeGeometry(ellipseShape(eyeConfig.xRadius, eyeConfig.yRadius));
-    const eyeMat = new THREE.MeshBasicMaterial({
-      color: 0xf8faff,
-      transparent: true,
-      opacity: 1.0,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-    });
-
-    this._leftEye = new THREE.Mesh(eyeGeom, eyeMat.clone());
-    this._rightEye = new THREE.Mesh(eyeGeom, eyeMat.clone());
-    this._leftEye.position.copy(new THREE.Vector3(eyeConfig.leftPos.x, eyeConfig.leftPos.y, eyeConfig.leftPos.z));
-    this._rightEye.position.copy(new THREE.Vector3(eyeConfig.rightPos.x, eyeConfig.rightPos.y, eyeConfig.rightPos.z));
-    this._eyeGroup.add(this._leftEye);
-    this._eyeGroup.add(this._rightEye);
-
-    // Eye outline rings (colored glow borders)
-    const magRgb = hexToNormalizedRgb(palette.magenta);
+    // cyan rings the left eye, magenta the right (reference portrait)
+    const magRgb  = hexToNormalizedRgb(palette.magenta);
     const cyanRgb = hexToNormalizedRgb(palette.cyan);
+    const cyanCol = new THREE.Color(cyanRgb.r, cyanRgb.g, cyanRgb.b);
+    const magCol  = new THREE.Color(magRgb.r,  magRgb.g,  magRgb.b);
 
-    const ringGeom = (xr, yr) => {
+    // Additive glow-ellipse helper — ported from the Grimoire-Graph eye treatment,
+    // which layers an outer corona, an inner colour tint, and a ring halo over the
+    // opaque white. depthTest:false + renderOrder keeps the eyes crisp and always
+    // on top of the particle nebula. userData.baseOpacity lets the boot fade scale
+    // each layer relative to its design opacity instead of flattening them to 1.
+    const glowEllipse = (xr, yr, color, opacity, order) => {
+      const mat = new THREE.MeshBasicMaterial({
+        color, transparent: true, opacity,
+        side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending,
+        depthTest: false, depthWrite: false,
+      });
+      mat.userData.baseOpacity = opacity;
+      const mesh = new THREE.Mesh(new THREE.ShapeGeometry(ellipseShape(xr, yr)), mat);
+      mesh.renderOrder = order;
+      return mesh;
+    };
+
+    const xr = eyeConfig.xRadius, yr = eyeConfig.yRadius;
+
+    // Outer corona — large soft additive halo tinting the whole eye area
+    this._leftCorona  = glowEllipse(xr * 2.3, yr * 1.5, cyanCol, 0.13, 9);
+    this._rightCorona = glowEllipse(xr * 2.3, yr * 1.5, magCol,  0.13, 9);
+
+    // Eye whites — opaque, on top of corona
+    const eyeMat = new THREE.MeshBasicMaterial({
+      color: 0xf8faff, transparent: true, opacity: 1.0,
+      side: THREE.DoubleSide, depthTest: false, depthWrite: false,
+    });
+    eyeMat.userData.baseOpacity = 1.0;
+    const eyeGeom = new THREE.ShapeGeometry(ellipseShape(xr, yr));
+    this._leftEye  = new THREE.Mesh(eyeGeom, eyeMat.clone());
+    this._rightEye = new THREE.Mesh(eyeGeom, eyeMat.clone());
+    this._leftEye.renderOrder = 11; this._rightEye.renderOrder = 11;
+
+    // Inner colour tint — additive over the white core
+    this._leftInner  = glowEllipse(xr * 1.18, yr * 1.08, cyanCol, 0.30, 12);
+    this._rightInner = glowEllipse(xr * 1.18, yr * 1.08, magCol,  0.30, 12);
+
+    // Ring halo — additive band just outside the eye edge
+    this._leftRingGlow  = glowEllipse(xr * 1.55, yr * 1.32, cyanCol, 0.22, 11);
+    this._rightRingGlow = glowEllipse(xr * 1.55, yr * 1.32, magCol,  0.22, 11);
+
+    // Crisp outline rings
+    const ringGeom = (rx, ry) => {
       const points = [];
       for (let i = 0; i <= 64; i++) {
         const a = (i / 64) * Math.PI * 2;
-        points.push(new THREE.Vector3(Math.cos(a) * xr, Math.sin(a) * yr, 0));
+        points.push(new THREE.Vector3(Math.cos(a) * rx, Math.sin(a) * ry, 0));
       }
       return new THREE.BufferGeometry().setFromPoints(points);
     };
+    const ringMat = (color) => {
+      const m = new THREE.LineBasicMaterial({
+        color, transparent: true, opacity: 0.85, linewidth: 2,
+        depthTest: false, depthWrite: false,
+      });
+      m.userData.baseOpacity = 0.85;
+      return m;
+    };
+    this._leftRing  = new THREE.Line(ringGeom(xr * 1.08, yr * 1.08), ringMat(cyanCol));
+    this._rightRing = new THREE.Line(ringGeom(xr * 1.08, yr * 1.08), ringMat(magCol));
+    this._leftRing.renderOrder = 13; this._rightRing.renderOrder = 13;
 
-    // Reference portrait: cyan rings the left eye, magenta the right
-    const leftRingMat = new THREE.LineBasicMaterial({
-      color: new THREE.Color(cyanRgb.r, cyanRgb.g, cyanRgb.b),
-      transparent: true, opacity: 0.8, linewidth: 2,
-    });
-    const rightRingMat = new THREE.LineBasicMaterial({
-      color: new THREE.Color(magRgb.r, magRgb.g, magRgb.b),
-      transparent: true, opacity: 0.8, linewidth: 2,
-    });
-
-    this._leftRing = new THREE.Line(ringGeom(eyeConfig.xRadius * 1.08, eyeConfig.yRadius * 1.08), leftRingMat);
-    this._rightRing = new THREE.Line(ringGeom(eyeConfig.xRadius * 1.08, eyeConfig.yRadius * 1.08), rightRingMat);
-    this._leftRing.position.copy(this._leftEye.position);
-    this._rightRing.position.copy(this._rightEye.position);
-    this._eyeGroup.add(this._leftRing);
-    this._eyeGroup.add(this._rightRing);
+    // Arrays drive position / blink / orientation in _updateEyes (back → front)
+    this._leftEyeMeshes  = [this._leftCorona,  this._leftEye,  this._leftRingGlow,  this._leftInner,  this._leftRing];
+    this._rightEyeMeshes = [this._rightCorona, this._rightEye, this._rightRingGlow, this._rightInner, this._rightRing];
+    for (const m of this._leftEyeMeshes)  this._eyeGroup.add(m);
+    for (const m of this._rightEyeMeshes) this._eyeGroup.add(m);
   }
 
   _updateEyes() {
@@ -514,26 +565,24 @@ export class ThreeJsBackend extends Renderer {
     const ox = this._eyeCurrentX;
     const oy = this._eyeCurrentY;
 
-    // Apply blink as Y-scale and eye offset
+    // Apply blink as Y-scale and eye offset — to every layer of each eye.
     const bs = this._blinkScale * this._eyeOpenProgress;
+    const q  = this._camera.quaternion;
 
-    this._leftEye.scale.set(1, bs, 1);
-    this._rightEye.scale.set(1, bs, 1);
-    this._leftRing.scale.set(1, bs, 1);
-    this._rightRing.scale.set(1, bs, 1);
+    for (const m of this._leftEyeMeshes) {
+      m.position.set(cfg.leftPos.x + ox, cfg.leftPos.y + oy, cfg.leftPos.z);
+      m.scale.set(1, bs, 1);
+      m.quaternion.copy(q);
+    }
+    for (const m of this._rightEyeMeshes) {
+      m.position.set(cfg.rightPos.x + ox, cfg.rightPos.y + oy, cfg.rightPos.z);
+      m.scale.set(1, bs, 1);
+      m.quaternion.copy(q);
+    }
 
-    this._leftEye.position.set(cfg.leftPos.x + ox, cfg.leftPos.y + oy, cfg.leftPos.z);
-    this._rightEye.position.set(cfg.rightPos.x + ox, cfg.rightPos.y + oy, cfg.rightPos.z);
-    this._leftRing.position.copy(this._leftEye.position);
-    this._rightRing.position.copy(this._rightEye.position);
-
-    // Eyes always face camera
-    this._leftEye.quaternion.copy(this._camera.quaternion);
-    this._rightEye.quaternion.copy(this._camera.quaternion);
-    this._leftRing.quaternion.copy(this._camera.quaternion);
-    this._rightRing.quaternion.copy(this._camera.quaternion);
-    this._leftPortal.quaternion.copy(this._camera.quaternion);
-    this._rightPortal.quaternion.copy(this._camera.quaternion);
+    // Portals always face camera (positioned separately below)
+    this._leftPortal.quaternion.copy(q);
+    this._rightPortal.quaternion.copy(q);
 
     this._leftPortal.position.set(cfg.leftPos.x + ox, cfg.leftPos.y - 0.15 + oy, cfg.leftPos.z - 0.02);
     this._rightPortal.position.set(cfg.rightPos.x + ox, cfg.rightPos.y + 0.15 + oy, cfg.rightPos.z - 0.02);
@@ -648,7 +697,10 @@ export class ThreeJsBackend extends Renderer {
 
       if (showEyes) {
         this._eyeGroup.children.forEach(c => {
-          if (c.material) c.material.opacity = eyesProgress;
+          if (c.material) {
+            const base = c.material.userData.baseOpacity ?? 1;
+            c.material.opacity = base * eyesProgress;
+          }
         });
       }
 
@@ -685,6 +737,9 @@ export class ThreeJsBackend extends Renderer {
 
   setEntityState(state) {
     this._state = state;
+    // Map persona state → entropy so the nebula visibly reacts (mirrors Canvas2D).
+    const e = state === 'thinking' ? 0.6 : state === 'speaking' ? 0.8 : 0.3;
+    this.setEntropy(e);
   }
 
   render() {}

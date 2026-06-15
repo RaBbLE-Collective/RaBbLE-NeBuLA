@@ -18,14 +18,17 @@ export class ParticleSystem {
     this._particles     = [];
 
     this.cfg = {
-      glowFraction: 0.42,         // fraction of particles that get glow canvas
-                                  // (matches the deployed reference ~45% — the
-                                  //  soft overlapping haze that makes the nebula
-                                  //  read as one cohesive cloud, not crisp bokeh)
+      glowFraction: 0.30,         // fraction of particles that ALSO get a glow halo.
+                                  // Every particle now draws a crisp core (see draw());
+                                  // this fraction only adds a soft bloom *around* that
+                                  //  core. Lower than the old 0.42 blur-only value —
+                                  //  the nebula reads as defined dots in a haze, not
+                                  //  a field of out-of-focus bokeh blobs.
       orbitSpeedMultiplier: 1.0,  // multiplies per-particle speed during orbit
-      sizeMin: 0.8,               // minimum particle size in px
-      sizeMax: 11.8,              // maximum particle size in px
-      bloomRadius: 6,             // base CSS blur radius in px (on glow canvas)
+      sizeMin: 1.0,               // minimum particle size in px
+      sizeMax: 8.5,               // maximum particle size in px (was 11.8 — giant
+                                  //  dots blurred into bokeh; tighter max = defined)
+      bloomRadius: 4,             // base CSS blur radius in px (on glow canvas)
     };
 
     this._initParticles();
@@ -161,6 +164,13 @@ export class ParticleSystem {
 
     // Pass 1 — flat particles, per-particle draw with inlined visibility math.
     // Squared falloff (no sqrt), early-exit for out-of-range particles.
+    //
+    // Every particle draws a crisp core here, including glow particles. The glow
+    // pass below only adds a soft halo *around* the glow particles' cores — it no
+    // longer replaces them. This is what makes the field read as defined dots in a
+    // haze instead of pure bokeh, and it kills the flicker that came from glow
+    // particles popping between the crisp and blurred canvases whenever the frame
+    // budget toggled `glowOn`.
     {
       const cx = this._cx, cy = this._cy;
       const FR2 = FALLOFF_RADIUS * FALLOFF_RADIUS;
@@ -169,7 +179,6 @@ export class ParticleSystem {
       const pts = this._particles;
       for (let i = 0, n = pts.length; i < n; i++) {
         const p = pts[i];
-        if (glowOn && p.glow) continue;
         const dx = p.rx - cx, dy = p.ry - cy;
         const d2 = dx * dx + dy * dy;
         if (d2 >= FR2) continue;                               // outside falloff — skip draw entirely
@@ -198,11 +207,11 @@ export class ParticleSystem {
           if (!p.glow) continue;
           const { alpha, settleBlend } = this._visibility(p, state);
           const eGlow  = 1 + state.entropy * 1.5;
-          const rScale = 1 + (0.4 + settleBlend * 0.6) * state.effectiveGlow * eGlow;
+          const rScale = 1 + (0.3 + settleBlend * 0.45) * state.effectiveGlow * eGlow;
           gctx.beginPath();
           gctx.arc(p.rx, p.ry, p.r * rScale, 0, Math.PI * 2);
           gctx.fillStyle = p.color;
-          gctx.globalAlpha = Math.min(1, alpha * 1.6);
+          gctx.globalAlpha = Math.min(1, alpha * 1.2);
           gctx.fill();
           gctx.globalAlpha = 1;
         }

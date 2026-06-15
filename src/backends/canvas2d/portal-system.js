@@ -54,15 +54,18 @@ export class PortalSystem {
 
     // Crisp arc on entity canvas — no shadowBlur
     buildArc(ctx);
-    ctx.strokeStyle = col; ctx.lineWidth = 1.8;
+    ctx.strokeStyle = col; ctx.lineWidth = 2.2;
     ctx.stroke();
 
-    // Thin glow arc — narrow lineWidth limits bleed into portal interior
+    // Glow arc — two passes for a stronger bloom: a wide soft outer halo plus a
+    // brighter inner band. The blur on the glow canvas spreads both, so the arc
+    // reads as a luminous ring of light rather than a faint outline.
     if (glowCtx) {
+      glowCtx.strokeStyle = col;
       buildArc(glowCtx);
-      glowCtx.strokeStyle = col; glowCtx.lineWidth = 4;
-      glowCtx.globalAlpha = 0.45;
-      glowCtx.stroke();
+      glowCtx.lineWidth = 11; glowCtx.globalAlpha = 0.32; glowCtx.stroke();
+      buildArc(glowCtx);
+      glowCtx.lineWidth = 5;  glowCtx.globalAlpha = 0.78; glowCtx.stroke();
       glowCtx.globalAlpha = 1;
     }
 
@@ -74,8 +77,12 @@ export class PortalSystem {
       ctx.fillStyle = '#fff'; ctx.fill();
 
       if (glowCtx) {
-        glowCtx.beginPath(); glowCtx.arc(xe, ye, 4.5, 0, Math.PI * 2);
-        glowCtx.fillStyle = col; glowCtx.globalAlpha = 0.5; glowCtx.fill(); glowCtx.globalAlpha = 1;
+        glowCtx.fillStyle = col;
+        glowCtx.beginPath(); glowCtx.arc(xe, ye, 9, 0, Math.PI * 2);
+        glowCtx.globalAlpha = 0.35; glowCtx.fill();
+        glowCtx.beginPath(); glowCtx.arc(xe, ye, 5.5, 0, Math.PI * 2);
+        glowCtx.globalAlpha = 0.8; glowCtx.fill();
+        glowCtx.globalAlpha = 1;
       }
     }
   }
