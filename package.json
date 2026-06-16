@@ -10,6 +10,7 @@
     "build:esm": "npx esbuild src/index.js --bundle --format=esm --external:three --outfile=dist/nebula.esm.js --minify",
     "build:dev": "npx esbuild src/index.js --bundle --format=iife --global-name=NeBuLA --external:three --outfile=dist/nebula.iife.js --sourcemap",
     "build:watch": "npx esbuild src/index.js --bundle --format=iife --global-name=NeBuLA --external:three --outfile=dist/nebula.iife.js --sourcemap --watch",
+    "build:versioned": "VERSION=${npm_config_version:-v0.0.0.0} && npm run build && mkdir -p dist/$VERSION && cp dist/nebula.iife.js dist/nebula.iife.js.map dist/nebula.esm.js dist/$VERSION/ 2>/dev/null; echo \"Built → dist/$VERSION/\"",
     "typecheck": "npx tsc --allowJs --checkJs --noEmit --strict src/index.js"
   },
   "peerDependencies": {
