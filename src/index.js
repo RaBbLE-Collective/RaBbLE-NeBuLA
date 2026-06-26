@@ -1,14 +1,24 @@
-// Side effect: registers <rabble-entity> custom element
-import './element.js';
+// Side effects: register all custom elements on load.
+import './element.js';           // <rabble-entity>
+import './elements/floor.js';    // <rabble-floor>  (Three.js Grimoire floor)
+import './elements/graph.js';    // <rabble-graph>  (Three.js knowledge graph)
+import './elements/doors.js';    // <rabble-doors>  (P5 stub — post-EP1)
 
 export * from './core/index.js';
 export * from './patterns/index.js';
 export * from './effects/index.js';
 export * from './backends/index.js';
 
-// ui — SVG effect factories (entity-mini, grimoire-ring, grimoire-eye)
-// Accessible as window.NeBuLA.ui.createEntityMini etc. in the IIFE build.
+// ui — DOM/SVG factories. Accessible as window.NeBuLA.ui.* in the IIFE build.
+//   createEntityMini, createGrimoireEye, createAmbientEye, createGrimoireRing
 export * as ui from './ui/index.js';
+
+// effects — parameterized rendering effects. Accessible as window.NeBuLA.effects.* .
+//   entropy (EntropyShader class), ambientField (AmbientField class),
+//   attractor (EntropyAttractor class),
+//   starfield(target, opts) -> handle,
+//   streaks/constellation/haze(target, opts) -> handle (P5 stubs)
+export * as effects from './effects/effects-ns.js';
 
 // NeBuLA namespace shape — these become window.NeBuLA.version etc. in the IIFE build.
 // _instance, particleCount, glowScale, renderDpr are written at runtime by element.js.
