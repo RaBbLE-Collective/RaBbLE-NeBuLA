@@ -15,4 +15,4 @@ export { EntropyShader  as entropy       } from './entropy-shader.js';
 export { EntropyAttractor as attractor   } from './attractor.js';
 export { AmbientField   as ambientField  } from './ambient-field.js';
 export { starfield }                        from './starfield.js';
-export { streaks, constellation, haze }    from './stubs.js';
+export { streaks, constellation, haze }    from './deepfield.js';

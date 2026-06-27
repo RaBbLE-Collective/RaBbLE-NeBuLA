@@ -22,33 +22,7 @@
  * @returns {{ start(), stop(), setParams(opts) }}
  */
 
-function _resolvePalette(el) {
-  const cs = getComputedStyle(el || document.documentElement);
-  const v  = (n, fb) => { const val = cs.getPropertyValue(n).trim(); return val || fb; };
-  return {
-    magenta: v('--magenta', '#ff2d78'),
-    cyan:    v('--cyan',    '#00f5ff'),
-    violet:  v('--violet',  '#bf5fff'),
-    pink:    v('--pink',    '#ff79c6'),
-    text:    v('--text',    '#e8e6f0'),
-  };
-}
-
-function _hexSolid(hex) {
-  if (!hex || hex[0] !== '#') return hex;
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  return `rgb(${r},${g},${b})`;
-}
-
-function _hexAlpha(hex, a) {
-  if (!hex || hex[0] !== '#') return hex;
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  return `rgba(${r},${g},${b},${a})`;
-}
+import { resolvePalette as _resolvePalette, hexSolid as _hexSolid, hexAlpha as _hexAlpha } from './_palette.js';
 
 export function starfield(target, opts) {
   opts = opts || {};
