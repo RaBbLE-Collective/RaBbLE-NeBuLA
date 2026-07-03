@@ -3,8 +3,8 @@
 ```
 epoch: 0 | evolution: 0 | echo: 0 | episode: 1 (in progress)
 version: v0.0.0.0 (targeting v0.0.0.1 at Episode 1 air)
-last session: 2026-06-08 (Session 53)
-status: Ep1 Phases 1–7 complete · Rearchitecture Phases 1–4 done · Phase 5 (effects systems) next
+last session: 2026-07-03 (S190)
+status: Ep1 Phases 1–7 complete · Rearchitecture Phases 1–4 done · Three.js entity WIRED + ALIVE (S190) · Phase 5 (effects systems) next
 ```
 
 RaBbLE-NeBuLA is the Collective's unified rendering engine — entropy-driven, backend-agnostic, built to make RaBbLE's inner state visible as rendered space. Ships as CDN-distributed IIFE + ESM bundles.
@@ -38,7 +38,15 @@ RaBbLE-NeBuLA is the Collective's unified rendering engine — entropy-driven, b
 
 **Layer 1** (entity persona — eyes, portal, particle nebula) lives in `src/element.js` + `src/backends/canvas2d-backend.js`. Registered as `<rabble-entity>` custom element in the IIFE bundle. World loads it via `/nebula/v0.0.0.0/nebula.iife.js`.
 
-**Layer 2** (3D Flat-Chaos quantum visualization) — Three.js backend complete (Phase 4).
+**Layer 2** (Three.js entity) — **WIRED + ALIVE as of S190.** No longer "pending":
+- `<rabble-entity backend="threejs">` opt-in on the custom element (`src/element.js`); WebGL capability check + silent fallback to Canvas2D when THREE unavailable.
+- Shared memoized CDN loader `src/utils/three-loader.js` (three@0.160.0 pin centralized; floor/graph/entity all use it — no duplicate downloads, no "Multiple instances of Three.js" warning).
+- One soul, two bodies: gaze/blink behavior (saccade table, spring pursuit, distraction drift, jolt, 4-state burst-blink FSM) extracted to `src/backends/eye-behavior.js`, consumed by BOTH `canvas2d/eye-system.js` and `threejs-backend.js`.
+- Visual parity with the Canvas2D persona: asymmetric black portal sockets (cyan above left eye, magenta below right — never level), additive rim annuli + corona glow, densified violet-core→cyan-rim nebula (900 body + 320 aura instanced particles, 2 draw calls).
+- API parity: `setEyeConfig` / `setParticleConfig` (documented no-op) / `setPortalVisible` / `getSnapshot` / `injectEyeJolt` on `ThreeJsBackend`.
+- Side-by-side proof page: `examples/threejs-parity.html`.
+- `NeBuLA.backends` now truthfully reports `['Canvas2D', 'Three.js']`; `NeBuLA.activeBackend` says which one is mounted.
+- Note: `specs/render-gap-analysis.md` describes the DEAD pre-port prototype — superseded header added, do not implement from it.
 
 **Reference code:** `RaBbLE-Xperimental/JS-Xperiments/NeBuLA-JS/` — archived patterns only.
 

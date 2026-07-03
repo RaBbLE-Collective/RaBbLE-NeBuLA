@@ -1,5 +1,5 @@
 import { palette } from '../../puppet/palette.js';
-import { PORTAL_W, PORTAL_H, EYE_GAP, BASE_Y_OFFSET, EYE_H } from './eye-system.js';
+import { PORTAL_W, PORTAL_H, EYE_GAP, BASE_Y_OFFSET, EYE_H, PORTAL_OFFSET_RATIO } from './eye-system.js';
 
 function easeInOut(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
 function clamp01(v)   { return Math.max(0, Math.min(1, v)); }
@@ -26,7 +26,7 @@ export class PortalSystem {
     const pW2   = PORTAL_W / 2, pH2 = PORTAL_H / 2;
     const lx    = this._cx - EYE_GAP, rx = this._cx + EYE_GAP;
     const baseY = this._cy + BASE_Y_OFFSET;
-    const lpY   = baseY - EYE_H * 0.44, rpY = baseY + EYE_H * 0.44;
+    const lpY   = baseY - EYE_H * PORTAL_OFFSET_RATIO, rpY = baseY + EYE_H * PORTAL_OFFSET_RATIO;
     const p     = easeInOut(drawProgress);
     this._drawPortalArc(ctx, t, lx, lpY, palette.cyan,    pW2, pH2, clamp01(p * 1.15),          glowCtx);
     this._drawPortalArc(ctx, t, rx, rpY, palette.magenta, pW2, pH2, clamp01((p - 0.08) * 1.15), glowCtx);

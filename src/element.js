@@ -1,14 +1,18 @@
 /**
  * element.js — <rabble-entity> custom element
  *
- * Registers rabble-entity against Canvas2dBackend.
+ * Registers rabble-entity. Defaults to Canvas2dBackend; opt into the
+ * Three.js Layer 2 renderer with backend="threejs" (falls back silently to
+ * Canvas2D when WebGL is unavailable or Three.js fails to load — mirrors
+ * the degradation pattern in elements/floor.js and elements/graph.js).
  * Side effect: customElements.define fires on import.
  *
  * The element owns canvas sizing (overscan, DPR cap, ResizeObserver) and
- * delegates all rendering to Canvas2dBackend. On connect it writes
+ * delegates all rendering to the selected backend. On connect it writes
  * window.NeBuLA._instance and the perf metrics so World can read them.
  *
  * HTML attributes:
+ *   backend         'canvas2d'|'threejs'  default: 'canvas2d'
  *   mode           'idle'|'boot'   default: 'idle'
  *   particle-count  number         default: 260 (capped centrally at 300, 160 on mobile)
  *   overscan        number         default: 2.35  (capped for mobile/small)
@@ -18,6 +22,8 @@
  *   fallback-height number         default: 320
  */
 import { Canvas2dBackend } from './backends/canvas2d-backend.js';
+import { ThreeJsBackend } from './backends/threejs-backend.js';
+import { ensureThree, hasWebGL } from './utils/three-loader.js';
 
 function parseBool(v, fallback) {
   if (v == null) return fallback;
@@ -118,31 +124,68 @@ class RaBbLEEntityElement extends HTMLElement {
     const requested     = parseInt(this.getAttribute('particle-count') || '150', 10);
     const particleCount = Math.min(isMobile ? 100 : 150, requested);
 
-    this._backend = new Canvas2dBackend(this._canvas, {
-      fieldCanvas:   this._fieldCanvas,
-      glowCanvas:    this._glowCanvas,
-      mode:          this.getAttribute('mode') || 'idle',
-      particleCount,
-      transparent:   true,
-      interactive:   parseBool(this.getAttribute('interactive'),   true),
-      showWaveform:  parseBool(this.getAttribute('show-waveform'), false),
-      dpr:           perfDpr,
-      glowScale,
-      onReady: () => {
-        this.dispatchEvent(new CustomEvent('entity-ready', { bubbles: true }));
-        window.dispatchEvent(new CustomEvent('rabble:entity-ready'));
-      },
-    });
+    const mountCanvas2d = () => {
+      this._backend = new Canvas2dBackend(this._canvas, {
+        fieldCanvas:   this._fieldCanvas,
+        glowCanvas:    this._glowCanvas,
+        mode:          this.getAttribute('mode') || 'idle',
+        particleCount,
+        transparent:   true,
+        interactive:   parseBool(this.getAttribute('interactive'),   true),
+        showWaveform:  parseBool(this.getAttribute('show-waveform'), false),
+        dpr:           perfDpr,
+        glowScale,
+        onReady: () => {
+          this.dispatchEvent(new CustomEvent('entity-ready', { bubbles: true }));
+          window.dispatchEvent(new CustomEvent('rabble:entity-ready'));
+        },
+      });
+      this._exposeInstance(particleCount, glowScale, perfDpr, 'Canvas2D');
+    };
 
-    // Expose runtime metrics on the NeBuLA namespace
-    if (window.NeBuLA) {
-      window.NeBuLA._instance    = this._backend;
-      window.NeBuLA.particleCount = particleCount;
-      window.NeBuLA.glowScale     = glowScale;
-      window.NeBuLA.renderDpr     = perfDpr;
+    const requestedBackend = (this.getAttribute('backend') || 'canvas2d').toLowerCase();
+
+    if (requestedBackend === 'threejs') {
+      if (!hasWebGL()) {
+        console.warn('[rabble-entity] backend="threejs" requested but WebGL is unavailable; falling back to Canvas2D.');
+        mountCanvas2d();
+      } else {
+        ensureThree()
+          .then(() => {
+            if (!this._connected) return; // disconnected while Three.js was loading
+            // Entity canvas is pointer-events:none by default (Canvas2D reads
+            // mouse from window) — the 3JS backend's orbit/wheel controls
+            // listen on the canvas itself, so re-enable events for it.
+            if (parseBool(this.getAttribute('interactive'), true)) {
+              this._canvas.style.pointerEvents = 'auto';
+            }
+            this._backend = new ThreeJsBackend(this._canvas, {});
+            if ((this.getAttribute('mode') || 'idle') === 'boot') this._backend.triggerBoot();
+            this._exposeInstance(particleCount, glowScale, perfDpr, 'Three.js');
+            this.dispatchEvent(new CustomEvent('entity-ready', { bubbles: true }));
+            window.dispatchEvent(new CustomEvent('rabble:entity-ready'));
+            requestAnimationFrame(this._resize);
+          })
+          .catch((err) => {
+            console.warn('[rabble-entity] Three.js backend failed to load, falling back to Canvas2D:', err.message);
+            if (this._connected) mountCanvas2d();
+          });
+      }
+    } else {
+      mountCanvas2d();
     }
 
     requestAnimationFrame(this._resize);
+  }
+
+  _exposeInstance(particleCount, glowScale, perfDpr, backendName) {
+    if (window.NeBuLA) {
+      window.NeBuLA._instance     = this._backend;
+      window.NeBuLA.particleCount = particleCount;
+      window.NeBuLA.glowScale     = glowScale;
+      window.NeBuLA.renderDpr     = perfDpr;
+      window.NeBuLA.activeBackend = backendName;
+    }
   }
 
   disconnectedCallback() {

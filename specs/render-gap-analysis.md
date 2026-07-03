@@ -1,5 +1,14 @@
 # Visual Analysis: Current Render vs Concept Art
 
+> **SUPERSEDED (S190):** this document describes the pre-port Xperimental
+> prototype (circular eyes, eyebrows, mouth tubes) — none of that exists in
+> the current implementation and none of it should be built. The current
+> Three.js entity is `src/backends/threejs-backend.js` (tall-ellipse eyes,
+> asymmetric portal sockets, shared `src/backends/eye-behavior.js` soul with
+> the Canvas2D backend). Canonical visual spec:
+> `RaBbLE-Aether/RaBbLE-Entity-Visual-Spec.md`. Kept for historical reference
+> only (condense-not-delete).
+
 ## Overview
 This document details the specific differences between the current Three.js rendered Rabble character and the original RabbleConcept01.png design concept.
 

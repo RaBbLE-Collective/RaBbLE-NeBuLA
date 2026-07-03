@@ -21,7 +21,8 @@ export * as ui from './ui/index.js';
 export * as effects from './effects/effects-ns.js';
 
 // NeBuLA namespace shape — these become window.NeBuLA.version etc. in the IIFE build.
-// _instance, particleCount, glowScale, renderDpr are written at runtime by element.js.
+// _instance, particleCount, glowScale, renderDpr, activeBackend are written at
+// runtime by element.js once <rabble-entity> connects and picks a backend.
 export const version  = '0.0.0.0';
-export const backend  = 'Canvas2D';
-export const backends = ['Canvas2D'];
+export const backend  = 'Canvas2D';                 // default backend; see activeBackend for what's actually mounted
+export const backends = ['Canvas2D', 'Three.js'];    // Three.js is opt-in via <rabble-entity backend="threejs">, S190

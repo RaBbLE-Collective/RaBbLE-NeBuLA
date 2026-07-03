@@ -24,7 +24,7 @@
  *   owners()
  */
 
-const THREE_CDN = 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js';
+import { ensureThree } from '../utils/three-loader.js';
 
 // Bilinear color field: magenta→pink / cyan→violet
 const C00 = [0xff, 0x2d, 0x78]; // magenta (#ff2d78)
@@ -72,17 +72,6 @@ function bilinearRGB(u, v) {
   const g=Math.round(C00[1]*(1-u)*(1-v)+C10[1]*u*(1-v)+C01[1]*(1-u)*v+C11[1]*u*v);
   const b=Math.round(C00[2]*(1-u)*(1-v)+C10[2]*u*(1-v)+C01[2]*(1-u)*v+C11[2]*u*v);
   return { hex:(r<<16)|(g<<8)|b, css:`rgb(${r},${g},${b})` };
-}
-
-function ensureThree() {
-  return new Promise((resolve,reject)=>{
-    if(window.THREE){resolve(window.THREE);return;}
-    const s=document.createElement('script');
-    s.src=THREE_CDN;
-    s.onload=()=>window.THREE?resolve(window.THREE):reject(new Error('[rabble-graph] THREE not set'));
-    s.onerror=()=>reject(new Error('[rabble-graph] Failed to load Three.js from CDN'));
-    document.head.appendChild(s);
-  });
 }
 
 function buildGraph(hostEl, THREE, data, dispatch) {

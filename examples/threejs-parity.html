@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>NeBuLA — Canvas2D vs Three.js parity</title>
+<style>
+  body {
+    margin: 0;
+    background: #05000c;
+    color: #e8e6f0;
+    font-family: monospace;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    gap: 1rem;
+    padding: 1.5rem 0;
+  }
+  h1 { font-size: 14px; color: #00f5ff; margin: 0; }
+  .row { display: flex; gap: 6rem; flex-wrap: wrap; justify-content: center; }
+  .panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .panel label { font-size: 12px; color: #ff2d78; }
+  .stage {
+    width: 460px;
+    height: 320px;
+    background: #05000c;
+    border: 1px solid #2a2840;
+    position: relative;
+    overflow: hidden; /* clip entity overscan bleed so panels don't overlap in this side-by-side test */
+  }
+  .stage rabble-entity {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+  #metrics {
+    font-size: 11px;
+    color: #6b6880;
+    white-space: pre;
+  }
+  button {
+    background: transparent;
+    border: 1px solid #00f5ff;
+    color: #00f5ff;
+    padding: 0.3rem 0.8rem;
+    cursor: pointer;
+    font-family: monospace;
+    font-size: 11px;
+  }
+</style>
+<!-- Chrysalis proof pattern: load three.min.js as a global script tag BEFORE
+     the NeBuLA bundle so ThreeJsBackend's `window.THREE` peer-dependency
+     check succeeds without an extra fetch through three-loader.js. -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script src="../dist/nebula.iife.js"></script>
+</head>
+<body>
+  <h1>NeBuLA entity — Canvas2D (left, the soul) vs Three.js (right, the awakening)</h1>
+  <div class="row">
+    <div class="panel">
+      <label>Canvas2D — backend="canvas2d" (default)</label>
+      <div class="stage">
+        <rabble-entity id="c2d" mode="boot" interactive="true" overscan="1.4"></rabble-entity>
+      </div>
+    </div>
+    <div class="panel">
+      <label>Three.js — backend="threejs"</label>
+      <div class="stage">
+        <rabble-entity id="c3d" backend="threejs" mode="boot" interactive="true" overscan="1.4"></rabble-entity>
+      </div>
+    </div>
+  </div>
+  <div class="row">
+    <button id="boot-btn">Re-trigger boot (both)</button>
+    <button id="jolt-btn">Inject jolt (both)</button>
+  </div>
+  <div id="metrics">reading…</div>
+
+  <script>
+    const c2d = document.getElementById('c2d');
+    const c3d = document.getElementById('c3d');
+
+    document.getElementById('boot-btn').addEventListener('click', () => {
+      c2d.triggerBoot();
+      c3d.triggerBoot();
+    });
+    document.getElementById('jolt-btn').addEventListener('click', () => {
+      c2d.injectEyeJolt(0.8, -0.4);
+      c3d.injectEyeJolt(0.8, -0.4);
+    });
+
+    setInterval(() => {
+      const m2d = c2d.getSnapshot ? c2d.getSnapshot() : null;
+      const inst = window.NeBuLA && window.NeBuLA._instance;
+      const perf3d = c3d._backend && c3d._backend.getPerformanceMetrics
+        ? c3d._backend.getPerformanceMetrics() : null;
+      const perf2d = c2d._backend && c2d._backend.getPerformanceMetrics
+        ? c2d._backend.getPerformanceMetrics() : null;
+      document.getElementById('metrics').textContent =
+        `backends reported: ${window.NeBuLA ? JSON.stringify(window.NeBuLA.backends) : '?'}\n` +
+        `canvas2d fps: ${perf2d ? perf2d.fps : '?'}   threejs fps: ${perf3d ? perf3d.fps : '?'}   threejs entityCount: ${perf3d ? perf3d.entityCount : '?'}`;
+    }, 1000);
+  </script>
+</body>
+</html>
