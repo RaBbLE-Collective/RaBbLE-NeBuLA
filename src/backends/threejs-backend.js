@@ -267,7 +267,13 @@ export class ThreeJsBackend extends Renderer {
 
       const x = r * Math.sin(phi) * Math.cos(theta);
       const y = r * Math.sin(phi) * Math.sin(theta) * 0.85 + 0.3;
-      const z = r * Math.cos(phi);
+      let z = r * Math.cos(phi);
+      // Keep the halo out of the camera's lap: with the camera at z 4.6, an
+      // aura particle spawned near z 4 sits fractions of a unit from the lens
+      // and blows up into a giant faceted blob (S190 orchestrator review).
+      // Mirror anything past z 2.0 into the back hemisphere — same density,
+      // but the space between the face (z 1.6) and the camera stays clear.
+      if (z > 2.0) z = -z;
 
       const s = 0.025 + Math.random() * 0.07;
       const opacity = 0.2 + Math.random() * 0.4;
