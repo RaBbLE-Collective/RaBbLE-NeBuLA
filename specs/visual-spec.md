@@ -100,6 +100,11 @@ If you are choosing fresh colors, pick **two neons that are clearly distinct
 in hue, both saturated, both at full luminance.** No earth tones. No
 desaturated tints. No matching pair.
 
+**Which color sits on which side is NOT canonical** (ruling, S190). A
+left/right swap reads as expression or a change signal, not an identity
+error. The invariant is only that the two eyes differ — renderers do not
+need to preserve side assignment across backends or states.
+
 ---
 
 ## The portal slits — *the* visual signature
