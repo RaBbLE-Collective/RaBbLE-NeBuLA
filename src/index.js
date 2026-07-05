@@ -2,7 +2,7 @@
 import './element.js';           // <rabble-entity>
 import './elements/floor.js';    // <rabble-floor>  (Three.js Grimoire floor)
 import './elements/graph.js';    // <rabble-graph>  (Three.js knowledge graph)
-import './elements/doors.js';    // <rabble-doors>  (P5 stub — post-EP1)
+import './elements/doors.js';    // <rabble-doors>  (orbit engine, fully implemented)
 
 export * from './core/index.js';
 export * from './patterns/index.js';
@@ -15,9 +15,9 @@ export * as ui from './ui/index.js';
 
 // effects — parameterized rendering effects. Accessible as window.NeBuLA.effects.* .
 //   entropy (EntropyShader class), ambientField (AmbientField class),
-//   attractor (EntropyAttractor class),
+//   attractor (EntropyAttractor class), AnimationFilter class,
 //   starfield(target, opts) -> handle,
-//   streaks/constellation/haze(target, opts) -> handle (P5 stubs)
+//   streaks/constellation/haze(target, opts) -> handle
 export * as effects from './effects/effects-ns.js';
 
 // NeBuLA namespace shape — these become window.NeBuLA.version etc. in the IIFE build.
