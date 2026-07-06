@@ -1,0 +1,199 @@
+/*
+ * studio.css — NeBuLA Studio chrome only.
+ * All values reference Aether tokens (var(--rabble-*)). No hex, no bespoke
+ * component CSS — dropped instances render with whatever Aether/NeBuLA
+ * styling they already carry.
+ */
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--rabble-void);
+  color: var(--rabble-text);
+  font-family: var(--rabble-font-ui);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+.studio-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* ── Topbar ────────────────────────────────────────────────────────── */
+.studio-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--rabble-space-4);
+  padding: var(--rabble-space-3) var(--rabble-space-5);
+  background: var(--rabble-surface);
+  border-bottom: 1px solid var(--rabble-border);
+  flex-shrink: 0;
+}
+
+.studio-topbar-title {
+  display: flex;
+  align-items: center;
+  gap: var(--rabble-space-2);
+  font-family: var(--rabble-font-mono);
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  color: var(--rabble-text);
+  white-space: nowrap;
+}
+
+.studio-breakpoint-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--rabble-space-2);
+}
+
+.studio-breakpoint-btn {
+  font-size: 11px;
+  padding: 6px 12px;
+}
+
+.studio-breakpoint-btn.is-active {
+  color: var(--rabble-cyan);
+  border-color: var(--rabble-cyan);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--rabble-cyan) 45%, transparent);
+}
+
+.studio-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--rabble-space-2);
+}
+
+/* ── Body layout ───────────────────────────────────────────────────── */
+.studio-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+/* ── Palette (left sidebar) ───────────────────────────────────────── */
+.studio-palette {
+  width: 280px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  padding: var(--rabble-space-4);
+  background: color-mix(in srgb, var(--rabble-surface) 60%, transparent);
+  border-right: 1px solid var(--rabble-border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--rabble-space-4);
+}
+
+.studio-palette-refresh {
+  width: 100%;
+  font-size: 11px;
+}
+
+.studio-palette-empty {
+  font-family: var(--rabble-font-mono);
+  font-size: 11px;
+  color: var(--rabble-muted);
+  padding: var(--rabble-space-2) 0;
+}
+
+.studio-palette-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rabble-space-2);
+}
+
+.studio-palette-section-label {
+  font-family: var(--rabble-font-mono);
+  font-size: 10px;
+  color: var(--rabble-dimmer);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.studio-palette-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--rabble-space-2);
+  padding: var(--rabble-space-2) var(--rabble-space-3);
+  background: color-mix(in srgb, var(--rabble-raised) 70%, transparent);
+  border: 1px solid var(--rabble-border);
+  border-radius: var(--rabble-radius-md);
+  cursor: grab;
+  transition: border-color 150ms ease, transform 150ms ease;
+}
+
+.studio-palette-entry:hover {
+  border-color: var(--rabble-cyan);
+}
+
+.studio-palette-entry:active {
+  cursor: grabbing;
+}
+
+.studio-palette-entry-name {
+  font-family: var(--rabble-font-mono);
+  font-size: 11px;
+  color: var(--rabble-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio-palette-entry-kind {
+  font-size: 9px;
+  flex-shrink: 0;
+}
+
+/* ── Canvas viewport (center) ──────────────────────────────────────── */
+.studio-canvas-viewport {
+  flex: 1;
+  overflow: auto;
+  display: flex;
+  justify-content: center;
+  padding: var(--rabble-space-6);
+  background: var(--rabble-bg);
+}
+
+.studio-canvas {
+  width: 1280px;
+  min-width: 320px;
+  min-height: 640px;
+  margin: 0 auto;
+  padding: var(--rabble-space-4);
+  background: var(--rabble-surface);
+  border: 1px solid var(--rabble-border);
+  border-radius: var(--rabble-radius-md);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--rabble-void) 40%, transparent);
+  transition: width 200ms ease;
+  display: flex;
+  flex-direction: column;
+  gap: var(--rabble-space-3);
+}
+
+/* ── Placed instances ──────────────────────────────────────────────── */
+.nebula-studio-instance {
+  position: relative;
+  outline: 1px dashed transparent;
+  outline-offset: 3px;
+  cursor: grab;
+  transition: outline-color 120ms ease, opacity 120ms ease;
+}
+
+.nebula-studio-instance:hover {
+  outline-color: color-mix(in srgb, var(--rabble-border) 80%, transparent);
+}
+
+.nebula-studio-instance.is-selected {
+  outline: 2px solid var(--rabble-cyan);
+  outline-offset: 3px;
+}
+
+.nebula-studio-instance.is-dragging {
+  opacity: 0.4;
+}

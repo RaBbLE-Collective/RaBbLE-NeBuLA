@@ -31,6 +31,7 @@ Backend progression: Canvas2D → Three.js/WebGL → WebGPU → C++/OpenGL → Q
 |---|---|
 | `CONTEXT.md` | Current state, active branch, episode status |
 | `README.md` | Public-facing description (GitHub) |
+| `studio/` | NeBuLA Studio — WYSIWYG page-layout builder dev tool (drag Aether/NeBuLA components onto a canvas, breakpoint preview, JSON save/load). Plan: RaBbLE-Grimoire/log/plans/NeBuLA-Studio-Plan.md |
 | `../RaBbLE-Grimoire/RaBbLE-NeBuLA/RaBbLE-NeBuLA-Architecture.md` | Two-layer model, Layer 1 API, Layer 2 primitives |
 | `../RaBbLE-Grimoire/RaBbLE-NeBuLA/RaBbLE-NeBuLA-Roadmap.md` | Episode tracker, exit conditions, implementation notes |
 | `../RaBbLE-Grimoire/RaBbLE-NeBuLA/RaBbLE-NeBuLA-Identity.md` | Entity lore, origin, philosophy |
