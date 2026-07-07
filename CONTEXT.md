@@ -77,7 +77,7 @@ RaBbLE-NeBuLA is the Collective's unified rendering engine — entropy-driven, b
 | 5 | Animation system (AnimationMixer) | ✅ Done |
 | 6 | Visual puppet layer — `<rabble-entity>` element in `src/element.js` | ✅ Done |
 | 7 | World integration — bundle loaded by `RaBbLE-NeBuLA.js` loader | ✅ Done |
-| 8 | NeBuLA Studio dev tool | In progress — MVP building (S198) |
+| 8 | NeBuLA Studio dev tool | MVP built + verified (S198) — see `RaBbLE-Grimoire/RaBbLE-NeBuLA/RaBbLE-NeBuLA-Studio.md`; delete/resize/inspector + visual palette next |
 
 ---
 
