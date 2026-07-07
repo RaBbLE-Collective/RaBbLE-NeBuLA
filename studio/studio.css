@@ -117,8 +117,7 @@ html, body {
 
 .studio-palette-entry {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
   gap: var(--rabble-space-2);
   padding: var(--rabble-space-2) var(--rabble-space-3);
   background: color-mix(in srgb, var(--rabble-raised) 70%, transparent);
@@ -134,6 +133,32 @@ html, body {
 
 .studio-palette-entry:active {
   cursor: grabbing;
+}
+
+.studio-palette-entry-preview {
+  height: 56px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--rabble-radius-sm);
+  background: color-mix(in srgb, var(--rabble-void) 35%, transparent);
+  /* Decorative only — the preview is a real rendered component, but clicks
+     and drags must always fall through to the card itself (the palette
+     drag payload lives on .studio-palette-entry, not on this content). */
+  pointer-events: none;
+}
+
+.studio-palette-entry-preview.is-placeholder {
+  font-size: 20px;
+  color: var(--rabble-dimmer);
+}
+
+.studio-palette-entry-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--rabble-space-2);
 }
 
 .studio-palette-entry-name {
@@ -196,4 +221,62 @@ html, body {
 
 .nebula-studio-instance.is-dragging {
   opacity: 0.4;
+}
+
+/* ── Selected-instance controls (delete + resize handles) ───────────── */
+.nebula-studio-controls {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.nebula-studio-control-delete {
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  line-height: 18px;
+  border-radius: var(--rabble-radius-pill);
+  border: 1px solid var(--rabble-cyan);
+  background: var(--rabble-surface);
+  color: var(--rabble-cyan);
+  font-size: 13px;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.nebula-studio-control-delete:hover {
+  background: var(--rabble-cyan);
+  color: var(--rabble-void);
+}
+
+.nebula-studio-resize-handle {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background: var(--rabble-cyan);
+  border-radius: 2px;
+  pointer-events: auto;
+}
+
+.nebula-studio-resize-e {
+  top: 50%;
+  right: -5px;
+  transform: translateY(-50%);
+  cursor: e-resize;
+}
+
+.nebula-studio-resize-s {
+  bottom: -5px;
+  left: 50%;
+  transform: translateX(-50%);
+  cursor: s-resize;
+}
+
+.nebula-studio-resize-se {
+  bottom: -5px;
+  right: -5px;
+  cursor: se-resize;
 }

@@ -4,12 +4,13 @@
  * Holds the current layoutDoc in memory, renders it via renderer.js's
  * renderLayout({ editable: true }), and decorates the rendered output with
  * selection + drag-to-reorder chrome (dnd.js) — the decoration renderer.js
- * deliberately stays ignorant of. On any mutation (drop, reorder, breakpoint
- * switch) it re-renders and autosaves.
+ * deliberately stays ignorant of. On any mutation (drop, reorder, delete,
+ * resize, breakpoint switch) it re-renders and autosaves.
  */
 
 import { renderLayout } from './renderer.js';
 import { makeDropZone, makeInstanceDraggable } from './dnd.js';
+import { attachInstanceControls } from './instance-controls.js';
 import { genInstanceId } from './layout-schema.js';
 import { autosaveLayout } from './layout-store.js';
 
@@ -19,6 +20,7 @@ export function createCanvas(hostEl, options) {
   let layoutDoc = options.initialLayout;
   let currentBreakpoint = layoutDoc.breakpoints[0] ? layoutDoc.breakpoints[0].id : 'desktop';
   let selectedId = null;
+  let activeControls = null;
   const onChange = options.onChange;
 
   function applyFrameWidth() {
@@ -87,10 +89,43 @@ export function createCanvas(hostEl, options) {
     afterChange();
   }
 
+  function deleteInstance(id) {
+    const idx = layoutDoc.instances.findIndex(function (i) { return i.id === id; });
+    if (idx === -1) return;
+    layoutDoc.instances.splice(idx, 1);
+    reindexOrder();
+    if (selectedId === id) selectedId = null;
+    afterChange();
+  }
+
+  function commitResize(id, size) {
+    const inst = layoutDoc.instances.find(function (i) { return i.id === id; });
+    if (!inst) return;
+    if (!inst.styleOverrides[currentBreakpoint]) inst.styleOverrides[currentBreakpoint] = {};
+    if (size.width) inst.styleOverrides[currentBreakpoint].width = size.width;
+    if (size.height) inst.styleOverrides[currentBreakpoint].height = size.height;
+    afterChange();
+  }
+
+  function mountControlsForSelection() {
+    if (activeControls) {
+      activeControls.destroy();
+      activeControls = null;
+    }
+    if (!selectedId) return;
+    const el = hostEl.querySelector('[data-instance-id="' + selectedId + '"]');
+    if (!el) return;
+    activeControls = attachInstanceControls(el, {
+      onDelete: function () { deleteInstance(selectedId); },
+      onResizeCommit: function (size) { commitResize(selectedId, size); },
+    });
+  }
+
   function updateSelectionClasses() {
     hostEl.querySelectorAll('[data-instance-id]').forEach(function (el) {
       el.classList.toggle('is-selected', el.dataset.instanceId === selectedId);
     });
+    mountControlsForSelection();
   }
 
   function selectInstance(id) {
@@ -124,6 +159,15 @@ export function createCanvas(hostEl, options) {
 
   hostEl.addEventListener('click', function () { selectInstance(null); });
 
+  document.addEventListener('keydown', function (ev) {
+    if (!selectedId) return;
+    if (ev.key !== 'Delete' && ev.key !== 'Backspace') return;
+    const active = document.activeElement;
+    if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable)) return;
+    ev.preventDefault();
+    deleteInstance(selectedId);
+  });
+
   applyFrameWidth();
   render();
 
@@ -142,5 +186,6 @@ export function createCanvas(hostEl, options) {
       render();
     },
     getSelectedId: function () { return selectedId; },
+    deleteSelected: function () { if (selectedId) deleteInstance(selectedId); },
   };
 }

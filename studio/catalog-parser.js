@@ -19,6 +19,11 @@
  * entities), matching the layout-schema.js example exactly — including
  * "..." placeholder bodies for markup entries that take children. This is
  * what keeps a saved layout reproducible even if the catalog changes later.
+ *
+ * Each entry also captures previewHtml — the innerHTML of the catalog page's
+ * own .atlas-entry-preview div (a real rendered instance of the component,
+ * already styled by the Aether CSS the Studio page loads) — so the palette
+ * sidebar can show a live visual thumbnail instead of just a name + badge.
  */
 
 export const DEFAULT_CATALOG_URL = '/world/RaBbLE-Catalog.html';
@@ -48,6 +53,8 @@ export function parseCatalogDocument(root) {
       const name = nameEl.textContent.trim();
       const codeText = codeEl.textContent || '';
       const firstLine = codeText.split('\n')[0].trim();
+      const previewEl = entryEl.querySelector('.atlas-entry-preview');
+      const previewHtml = previewEl ? previewEl.innerHTML : '';
 
       let kind;
       if (ELEMENT_TAG_RE.test(firstLine)) {
@@ -61,7 +68,7 @@ export function parseCatalogDocument(root) {
         return;
       }
 
-      entries.push({ sectionId: id, name: name, kind: kind, html: firstLine });
+      entries.push({ sectionId: id, name: name, kind: kind, html: firstLine, previewHtml: previewHtml });
     });
 
     if (entries.length) sections.push({ id: id, label: label, entries: entries });

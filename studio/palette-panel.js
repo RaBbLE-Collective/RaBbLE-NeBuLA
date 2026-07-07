@@ -48,10 +48,28 @@ function renderCatalog(hostEl, catalog, onRefreshClick) {
     section.entries.forEach(function (entry) {
       const card = document.createElement('div');
       card.className = 'studio-palette-entry';
-      card.innerHTML =
+
+      const preview = document.createElement('div');
+      if (entry.kind === 'markup' && entry.previewHtml) {
+        preview.className = 'studio-palette-entry-preview';
+        preview.innerHTML = entry.previewHtml;
+      } else {
+        // 'element' entries are live Three.js-backed custom elements
+        // (<rabble-floor>, <rabble-graph>, ...) — too costly to instantiate
+        // once per palette card, so they get a static glyph instead of a
+        // live render. Markup entries missing a preview fall back the same way.
+        preview.className = 'studio-palette-entry-preview is-placeholder';
+        preview.textContent = '◈';
+      }
+      card.appendChild(preview);
+
+      const meta = document.createElement('div');
+      meta.className = 'studio-palette-entry-meta';
+      meta.innerHTML =
         '<span class="studio-palette-entry-name">' + escapeText(entry.name) + '</span>' +
         '<span class="studio-palette-entry-kind rabble-badge rabble-accent-' +
         (entry.kind === 'element' ? 'cyan' : 'magenta') + '">' + entry.kind + '</span>';
+      card.appendChild(meta);
 
       makePaletteDraggable(card, function () {
         return {
