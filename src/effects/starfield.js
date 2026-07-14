@@ -45,8 +45,15 @@ export function starfield(target, opts) {
 
   function _buildCanvas() {
     canvas = document.createElement('canvas');
-    canvas.style.cssText = 'position:absolute;inset:0;pointer-events:none;';
-    target.style.position = target.style.position || 'relative';
+    // width/height:100% is load-bearing: a canvas is a replaced element, so
+    // inset:0 alone does NOT stretch it — it displays at its intrinsic
+    // (attribute) size, which is dpr-scaled. Without the explicit 100% the
+    // whole drawing renders oversized whenever dpr > 1 and every drawn point
+    // (constellation lines included) lands past the real cursor.
+    canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;';
+    // Only force a positioning context when the host has none — never clobber
+    // a stylesheet-positioned (fixed/absolute) host with inline 'relative'.
+    if (getComputedStyle(target).position === 'static') target.style.position = 'relative';
     target.appendChild(canvas);
     ctx = canvas.getContext('2d');
   }
