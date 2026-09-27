@@ -243,6 +243,7 @@ class RaBbLEEntityElement extends HTMLElement {
   pulse(kind)         { if (this._alive) this._alive.pulse(kind); }
   attend(x, y, d)     { if (this._alive) this._alive.attend(x, y, d); }
   setDimension(d)     { if (this._alive) this._alive.setDimension(d); }
+  setInsets(o)        { if (this._alive) this._alive.setInsets(o); }
 
   _exposeInstance(particleCount, glowScale, perfDpr, backendName) {
     if (window.NeBuLA) {

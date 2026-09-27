@@ -171,7 +171,14 @@ function resize(){
   DPR=Math.min(window.devicePixelRatio||1,dprCap);const tc=glc?cvg:cv;tc.width=Math.round(W*DPR);tc.height=Math.round(H*DPR);
   const a=W/H;cam.vw=a>=1.3?1600:a>=1?1300:a>=.75?1150:1000;cam.vh=cam.vw/a;
   if(a>=1.3&&cam.vh<900){/* very wide: keep full height */cam.vh=Math.max(cam.vh,720);cam.vw=cam.vh*a;}
-  readSafe();cam.s=W/cam.vw;cam.ox=(W+SAFE.l-SAFE.r)/2-800*cam.s;cam.oy=(H+SAFE.t-SAFE.b)/2-450*cam.s;layoutUI();
+  readSafe();cam.s=W/cam.vw;recam(true);layoutUI();
+}
+// Host insets (setInsets): UI the host floats over the stage (chat dock, status bar), on top of the device safe areas.
+// The settled entity centers in what is left and shrinks only if it would not fit; boot layout ignores them.
+const INS={t:0,r:0,b:0,l:0},camT={ox:0,oy:0};
+function recam(snap){
+  camT.ox=(W+SAFE.l+INS.l-SAFE.r-INS.r)/2-800*cam.s;camT.oy=(H+SAFE.t+INS.t-SAFE.b-INS.b)/2-450*cam.s;
+  if(snap||!boot.done){cam.ox=camT.ox;cam.oy=camT.oy;}
 }
 const toWorld=(x,y)=>({x:(x-cam.ox)/cam.s,y:(y-cam.oy)/cam.s});
 const portrait=()=>W/H<1;
@@ -179,7 +186,8 @@ const portrait=()=>W/H<1;
 // ============================================================ entity placement (boot: left quarter / portrait top, then slides to center)
 const E={x:800,y:450,s:1,w:1};
 const spreadX=u=>{const a=Math.abs(u);return a<=265?u:Math.sign(u)*(265+(a-265)*E.w);};
-const finalS=()=>portrait()?1.35:1;
+const ENTITY_H=760; // world units the settled entity needs vertically at scale 1 (orb, portal rings, mesh lobes)
+const finalS=()=>{const base=portrait()?1.35:1,room=(H-SAFE.t-SAFE.b-INS.t-INS.b)/cam.s;return base*Math.max(.55,Math.min(1,room/(ENTITY_H*base)));};
 function bootPlace(){return portrait()?{x:800,y:450-cam.vh*.17,s:.82,w:.62}:{x:800-cam.vw*.24,y:450,s:.8,w:.45};}
 
 // ============================================================ timing / state
@@ -660,8 +668,8 @@ function layoutUI(){
   const lh=Math.max(14,fsz*.33);logEl.style.height=(lh*5)+"px";logEl.dataset.lh=lh;
   const uh=H-SAFE.t-SAFE.b; // usable height between the Dynamic Island / status bar and the home indicator
   if(portrait()){const topPx=SAFE.t+uh*.6;Object.assign(bootui.style,{left:(SAFE.l+W*.08)+"px",right:(SAFE.r+W*.08)+"px",top:topPx+"px",width:"auto",alignItems:"center"});}
-  else{const cx=SAFE.l+.62*(W-SAFE.l-SAFE.r),bp=bootPlace(),orbRight=cam.ox+(bp.x+270*bp.s)*cam.s; // keep the text off the booting orb
-    const left=Math.max(cx-Math.min(W*.3,440),orbRight+12);
+  else{const cx=SAFE.l+.62*(W-SAFE.l-SAFE.r),bp=bootPlace(),meshRight=cam.ox+(bp.x+(265+(800-265)*bp.w)*bp.s)*cam.s; // keep the text off the booting orb AND its portal mesh
+    const left=Math.max(cx-Math.min(W*.3,440),meshRight+16);
     Object.assign(bootui.style,{left:left+"px",width:Math.max(120,Math.min((W-SAFE.l-SAFE.r)*.6,880,W-SAFE.r-16-left))+"px",top:(SAFE.t+uh*.33)+"px",right:"auto",alignItems:"flex-start"});}
   $("bar").style.width=portrait()?"80%":"70%";
   logLines.forEach((l,i)=>place(l,i));
@@ -1057,7 +1065,7 @@ function frame(now){
     else{const floor=1;if(dprCap>floor+.01){dprCap=Math.max(floor,Math.min(dprCap,window.devicePixelRatio||1)-.5);resize();}}}}else slowT=0;}
   stepStyle(dt);wellStep();ltime+=dt*sty.tempo;travel+=dt*420*(1+energy*.8)*(boot.done?1:seg(boot.t,.5,3));orbitAng+=dt*(sty.orbit+energy*1.5);
   energy=Math.max(sty.energy,energy-dt*.45);
-  bootStep(dt);bootUI();if(boot.done&&mode==="2d"){E.s+=(finalS()-E.s)*(1-Math.pow(.05,dt));}autoTick();updateEyes(dt);stepSprings(dt);heartbeat(dt);events(dt);
+  bootStep(dt);bootUI();if(boot.done){const k=1-Math.pow(.05,dt);cam.ox+=(camT.ox-cam.ox)*k;cam.oy+=(camT.oy-cam.oy)*k;if(mode==="2d")E.s+=(finalS()-E.s)*k;}autoTick();updateEyes(dt);stepSprings(dt);heartbeat(dt);events(dt);
   if(mode==="3d"&&T3.ready){
     E.x=800;E.y=450;E.s=1;E.w=1;
     drawMesh(dt,false);drawSphere(dt,false);drawLens(dt,false);drawPulses(dt,false);drawFx(dt,false);
@@ -1186,6 +1194,9 @@ const api = {
   pause() { if (paused) return; paused = true; if (rafId) cancelAnimationFrame(rafId); rafId = 0; },
   resume() { if (!paused || disposed) return; paused = false; last = null; rafId = requestAnimationFrame(frame); },
   resize() { resize(); if (mode === '3d' && T3.ready) T3.resize(); },
+  /** Host UI insets in CSS px ({top,right,bottom,left}, missing = 0; null clears), added to the device safe areas.
+   *  The settled 2D entity eases to center in the remaining area and scales down only if it would not fit. */
+  setInsets(o) { const v = k => Math.max(0, +((o || {})[k]) || 0); INS.t = v('top'); INS.r = v('right'); INS.b = v('bottom'); INS.l = v('left'); recam(false); },
   dispose() {
     if (disposed) return; disposed = true;
     if (rafId) cancelAnimationFrame(rafId);
