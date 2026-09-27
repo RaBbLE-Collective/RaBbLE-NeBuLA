@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>NeBuLA · Alive Entity Lab</title>
+<!-- Entity lab: exercises every method of <rabble-entity backend="alive">. Serve with
+     bash ../RaBbLE-Grimoire/spells/dev-serve.sh  →  http://localhost:8000/examples/alive.html
+     Query: ?delay=<s> (simulated backend step delay) · ?fail=1 · ?dim=3d · ?auto=0 -->
+<link rel="stylesheet" href="/aether/v0.0.0.0/aether.css">
+<style>
+  html, body { height: 100%; margin: 0; background: var(--rabble-bg); color: var(--rabble-text); font-family: var(--rabble-font-ui); }
+  rabble-entity { position: fixed; inset: 0; }
+  .lab { position: fixed; left: calc(12px + env(safe-area-inset-left, 0px)); right: calc(12px + env(safe-area-inset-right, 0px));
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px)); z-index: 2; display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+    padding: 8px; border: 1px solid var(--rabble-border); border-radius: 10px; background: color-mix(in srgb, var(--rabble-surface) 80%, transparent);
+    backdrop-filter: blur(8px); font-size: 12px; }
+  .lab b { color: var(--rabble-violet); font-weight: 600; letter-spacing: .08em; text-transform: uppercase; font-size: 11px; margin-left: 6px; }
+  .lab button, .lab select { font: 600 11px/1 var(--rabble-font-ui); letter-spacing: .06em; text-transform: uppercase; color: var(--rabble-text);
+    background: var(--rabble-raised); border: 1px solid var(--rabble-border); border-radius: 6px; padding: 7px 9px; cursor: pointer; }
+  .lab button:hover { border-color: var(--rabble-cyan); }
+  #snap { position: fixed; top: calc(10px + env(safe-area-inset-top, 0px)); right: calc(12px + env(safe-area-inset-right, 0px)); z-index: 2; font: 11px var(--rabble-font-mono); color: var(--rabble-muted); white-space: pre; text-align: right; }
+</style>
+</head>
+<body>
+<rabble-entity id="e" backend="alive"></rabble-entity>
+<div id="snap"></div>
+<div class="lab" id="lab">
+  <button id="boot">boot</button>
+  <b>state</b><button data-state="idle">idle</button><button data-state="listening">listening</button><button data-state="speaking">speaking</button>
+  <b>mood</b><button data-mood="idle">idle</button><button data-mood="ponder">ponder</button><button data-mood="process">process</button><button data-mood="insight">insight</button>
+  <b>emotion</b><button data-emo="calm">calm</button><button data-emo="joy">joy</button><button data-emo="sad">sad</button><button data-emo="angry">angry</button>
+  <b>portals</b><select id="pa"></select><select id="pb"></select>
+  <b>fx</b><button data-pulse="spark">spark</button><button data-pulse="bolt">bolt</button><button data-pulse="ring">ring</button><button data-pulse="shock">shock</button>
+  <button id="dim">3D</button>
+</div>
+<script src="/nebula/v0.0.0.0/nebula.iife.js"></script>
+<script>
+(function () {
+  var q = new URLSearchParams(location.search), e = document.getElementById('e');
+  var delay = parseFloat(q.get('delay') || '3'), fail = q.get('fail') === '1';
+  if (q.get('auto') === '0') e.setAttribute('autonomous', 'false');
+  function boot() {
+    // Simulated host work, the shape World uses: each step settles when its real work does.
+    var steps = [{ id: 'aether', label: 'Aether' }, { id: 'nebula', label: 'NeBuLA renderer' }, { id: 'score', label: 'sCoRE link' }];
+    e.boot({ steps: steps }).then(function () { if (q.get('dim') === '3d') e.setDimension('3d'); });
+    e.completeStep('aether');
+    setTimeout(function () { e.completeStep('nebula'); }, 600);
+    setTimeout(function () { fail ? e.failStep('score', 'offline') : e.completeStep('score'); }, delay * 1000);
+  }
+  document.getElementById('boot').onclick = boot;
+  document.getElementById('lab').addEventListener('click', function (ev) {
+    var b = ev.target.closest('button'); if (!b) return;
+    if (b.dataset.state) e.setState(b.dataset.state);
+    if (b.dataset.mood) e.setMood(b.dataset.mood, b.dataset.mood === 'idle' ? {} : { hold: 6 });
+    if (b.dataset.emo) e.setEmotion(b.dataset.emo);
+    if (b.dataset.pulse) e.pulse(b.dataset.pulse);
+  });
+  document.getElementById('dim').onclick = function () { e.setDimension(e.getSnapshot().dimension === '3d' ? '2d' : '3d'); };
+  var names = ['cyan', 'magenta', 'violet', 'pink'], pa = document.getElementById('pa'), pb = document.getElementById('pb');
+  names.forEach(function (n) { pa.add(new Option(n, n)); pb.add(new Option(n, n)); });
+  pa.value = 'cyan'; pb.value = 'magenta';
+  function portals() { if (!e.setPortals(pa.value, pb.value)) { pb.value = names.find(function (n) { return n !== pa.value; }); e.setPortals(pa.value, pb.value); } }
+  pa.onchange = pb.onchange = portals;
+  e.addEventListener('entity-notice', function (ev) { console.log('[notice]', ev.detail.message); });
+  setInterval(function () {
+    var s = e.getSnapshot(); if (!s) return;
+    document.getElementById('snap').textContent = 'state ' + s.state + ' · mood ' + s.mood + ' · emotion ' + s.emotion + ' · ' + s.dimension +
+      '\nboot t=' + s.boot.t.toFixed(2) + (s.boot.holding ? ' HOLD' : '') + (s.boot.done ? ' done' : '') + ' · quality ' + s.quality.toFixed(2);
+  }, 250);
+  if (q.get('autoboot') === '1') boot();
+})();
+</script>
+</body>
+</html>

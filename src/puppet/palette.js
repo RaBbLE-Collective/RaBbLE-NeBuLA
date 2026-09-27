@@ -1,23 +1,25 @@
 /**
  * NeBuLA Palette — Color management for entropy-driven rendering
  *
- * Single source of truth: RaBbLE-Grimoire/common/RaBbLE-Palette.md
+ * Single source of truth: RaBbLE-Grimoire/RaBbLE-Agent/RaBbLE-Palette.md
  * Reading strategy:
  *   1. Try CSS custom properties from loaded Aether CSS
  *   2. Fall back to canonical hex values from Grimoire
  *   3. Never embed raw hex values in rendering code
  *
- * Aether publishes these as CSS variables:
- *   --rabble-primary:   #ff2d78 (magenta)
- *   --rabble-secondary: #00f5ff (cyan)
- *   --rabble-tertiary:  #bf5fff (violet)
- *   etc.
+ * Aether publishes these as CSS variables (RaBbLE-Aether/assets/palette/rabble-palette.css):
+ *   --rabble-magenta, --rabble-cyan, --rabble-violet, --rabble-pink,
+ *   --rabble-bg, --rabble-surface, --rabble-raised, --rabble-border,
+ *   --rabble-text, --rabble-muted, --rabble-red, --rabble-green, --rabble-yellow
+ *
+ * `palette` is a snapshot taken at import. Renderers that mount after Aether
+ * loads (or honour per-element overrides) should call readPalette(el) instead.
  *
  * If Aether CSS is not loaded (e.g., in a server-side context), we gracefully
  * fall back to the Grimoire constants defined below.
  */
 
-// Canonical palette from RaBbLE-Grimoire/common/RaBbLE-Palette.md
+// Canonical palette from RaBbLE-Grimoire/RaBbLE-Agent/RaBbLE-Palette.md
 // These are the fallback values when CSS variables are not available.
 const GRIMOIRE_PALETTE = {
   // Core neons (primary identity colors)
@@ -45,19 +47,19 @@ const GRIMOIRE_PALETTE = {
 // CSS custom property names (published by Aether)
 // These map to Aether's rabble-palette.css custom properties.
 const CSS_VAR_MAP = {
-  magenta:  '--rabble-primary',
-  cyan:     '--rabble-secondary',
-  violet:   '--rabble-tertiary',
-  pink:     '--rabble-grid',
+  magenta:  '--rabble-magenta',
+  cyan:     '--rabble-cyan',
+  violet:   '--rabble-violet',
+  pink:     '--rabble-pink',
   bg:       '--rabble-bg',
   surface:  '--rabble-surface',
   raised:   '--rabble-raised',
   border:   '--rabble-border',
   text:     '--rabble-text',
   muted:    '--rabble-muted',
-  red:      '--rabble-error',
-  green:    '--rabble-success',
-  yellow:   '--rabble-warning',
+  red:      '--rabble-red',
+  green:    '--rabble-green',
+  yellow:   '--rabble-yellow',
 };
 
 /**
@@ -66,11 +68,11 @@ const CSS_VAR_MAP = {
  *
  * @returns {Object} Palette object with color names as keys, hex values as values
  */
-function createPalette() {
+function createPalette(el) {
   const palette = {};
 
   for (const [colorName, cssVarName] of Object.entries(CSS_VAR_MAP)) {
-    const cssValue = readCSSVar(cssVarName);
+    const cssValue = readCSSVar(cssVarName, el);
     // Use CSS value if found, otherwise use Grimoire fallback
     palette[colorName] = cssValue || GRIMOIRE_PALETTE[colorName];
   }
@@ -85,16 +87,17 @@ function createPalette() {
  * @param {string} varName - CSS variable name (e.g., '--rabble-primary')
  * @returns {string|null} Hex color value or null
  */
-function readCSSVar(varName) {
+function readCSSVar(varName, el) {
   // Guard against non-browser contexts (SSR, Node)
   if (typeof window === 'undefined' || !document?.documentElement) {
     return null;
   }
 
   try {
-    const computedStyle = getComputedStyle(document.documentElement);
+    const computedStyle = getComputedStyle(el || document.documentElement);
     const value = computedStyle.getPropertyValue(varName).trim();
-    return value || null;
+    // Only accept #rrggbb — renderers parse hex (rgba(), hexToRgb); anything else falls back.
+    return /^#[0-9a-f]{6}$/i.test(value) ? value.toLowerCase() : null;
   } catch {
     return null;
   }
@@ -110,6 +113,17 @@ function readCSSVar(varName) {
  *   ctx.strokeStyle = palette.cyan;
  */
 export const palette = createPalette();
+
+/**
+ * Read the palette live from an element's computed style (inherits Aether's
+ * :root tokens plus any per-element overrides). Falls back per color.
+ *
+ * @param {Element} [el] - element to resolve against (default: document root)
+ * @returns {Object} palette object, same keys as `palette`
+ */
+export function readPalette(el) {
+  return createPalette(el);
+}
 
 /**
  * Utility: Convert hex color to RGB object for Canvas operations.

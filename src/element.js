@@ -1,7 +1,9 @@
 /**
  * element.js — <rabble-entity> custom element
  *
- * Registers rabble-entity. Defaults to Canvas2dBackend; opt into the
+ * Registers rabble-entity. Defaults to Canvas2dBackend; backend="alive" mounts
+ * the alive entity (2D+3D, host-driven boot, moods; see backends/alive-backend.js
+ * and RaBbLE-Grimoire/RaBbLE-NeBuLA/RaBbLE-NeBuLA-API.md). Opt into the
  * Three.js Layer 2 renderer with backend="threejs" (falls back silently to
  * Canvas2D when WebGL is unavailable or Three.js fails to load — mirrors
  * the degradation pattern in elements/floor.js and elements/graph.js).
@@ -12,7 +14,10 @@
  * window.NeBuLA._instance and the perf metrics so World can read them.
  *
  * HTML attributes:
- *   backend         'canvas2d'|'threejs'  default: 'canvas2d'
+ *   backend         'canvas2d'|'threejs'|'alive'  default: 'canvas2d'
+ *   alive only: autoboot, autonomous, dimension ('2d'|'3d'), track-window, hold-to-listen,
+ *               skippable, step-timeout, tagline, ready-line, portal-a, portal-b,
+ *               state, mood, emotion (live: changing these attributes drives the entity)
  *   mode           'idle'|'boot'   default: 'idle'
  *   particle-count  number         default: 260 (capped centrally at 300, 160 on mobile)
  *   overscan        number         default: 2.35  (capped for mobile/small)
@@ -24,16 +29,32 @@
 import { Canvas2dBackend } from './backends/canvas2d-backend.js';
 import { ThreeJsBackend } from './backends/threejs-backend.js';
 import { ensureThree, hasWebGL } from './utils/three-loader.js';
+import { createAlive } from './backends/alive-backend.js';
 
 function parseBool(v, fallback) {
   if (v == null) return fallback;
   return v !== 'false' && v !== '0';
 }
 
+const ALIVE_LIVE_ATTRS = ['state', 'mood', 'emotion', 'dimension', 'portal-a', 'portal-b'];
+
 class RaBbLEEntityElement extends HTMLElement {
+  static get observedAttributes() { return ALIVE_LIVE_ATTRS; }
+
+  attributeChangedCallback(name, oldV, newV) {
+    if (!this._alive || oldV === newV || newV == null) return;
+    if (name === 'state') this._alive.setState(newV);
+    else if (name === 'mood') this._alive.setMood(newV);
+    else if (name === 'emotion') this._alive.setEmotion(newV);
+    else if (name === 'dimension') this._alive.setDimension(newV);
+    else this._alive.setPortals(this.getAttribute('portal-a') || 'cyan', this.getAttribute('portal-b') || 'magenta');
+  }
+
   connectedCallback() {
     if (this._connected) return;
     this._connected = true;
+
+    if ((this.getAttribute('backend') || '').toLowerCase() === 'alive') { this._mountAlive(); return; }
 
     this.classList.add('rabble-entity-host');
     this.style.position = this.style.position || 'relative';
@@ -178,6 +199,49 @@ class RaBbLEEntityElement extends HTMLElement {
     requestAnimationFrame(this._resize);
   }
 
+  // The alive entity paints a whole scene (field, grid, face) and fills its host; the host page sizes it.
+  _mountAlive() {
+    this.classList.add('rabble-entity-host', 'rabble-entity-host--alive');
+    if (getComputedStyle(this).position === 'static') this.style.position = 'relative';
+    if (getComputedStyle(this).display === 'inline') this.style.display = 'block';
+    const a = (n) => this.getAttribute(n);
+    const num = (n) => (a(n) == null ? undefined : parseFloat(a(n)));
+    this._alive = this._backend = createAlive(this, {
+      autoboot:     parseBool(a('autoboot'), false),
+      autonomous:   parseBool(a('autonomous'), true),
+      dimension:    a('dimension') || '2d',
+      interactive:  parseBool(a('interactive'), true),
+      trackWindow:  parseBool(a('track-window'), true),
+      holdToListen: parseBool(a('hold-to-listen'), false),
+      skippable:    parseBool(a('skippable'), true),
+      stepTimeout:  num('step-timeout'),
+      tagline:      a('tagline') == null ? undefined : a('tagline'),
+      readyLine:    a('ready-line') || undefined,
+      portalA:      a('portal-a') || undefined,
+      portalB:      a('portal-b') || undefined,
+    });
+    if (a('emotion')) this._alive.setEmotion(a('emotion'));
+    if (a('mood')) this._alive.setMood(a('mood'));
+    if (a('state')) this._alive.setState(a('state'));
+    this._exposeInstance(0, 1, window.devicePixelRatio || 1, 'Alive');
+    this.dispatchEvent(new CustomEvent('entity-ready', { bubbles: true }));
+    window.dispatchEvent(new CustomEvent('rabble:entity-ready'));
+  }
+
+  // ---- alive contract (no-ops on the legacy backends)
+  boot(o)             { return this._alive ? this._alive.boot(o) : (this.triggerBoot(), Promise.resolve()); }
+  completeStep(id)    { return this._alive ? this._alive.completeStep(id) : false; }
+  failStep(id, r)     { return this._alive ? this._alive.failStep(id, r) : false; }
+  skip()              { if (this._alive) this._alive.skip(); }
+  setState(s)         { if (this._alive) this._alive.setState(s); else this.setEntityState(s); }
+  setMood(m, o)       { if (this._alive) this._alive.setMood(m, o); }
+  setEmotion(e, o)    { if (this._alive) this._alive.setEmotion(e, o); }
+  setPortals(a, b)    { return this._alive ? this._alive.setPortals(a, b) : false; }
+  getPortals()        { return this._alive ? this._alive.getPortals() : null; }
+  pulse(kind)         { if (this._alive) this._alive.pulse(kind); }
+  attend(x, y, d)     { if (this._alive) this._alive.attend(x, y, d); }
+  setDimension(d)     { if (this._alive) this._alive.setDimension(d); }
+
   _exposeInstance(particleCount, glowScale, perfDpr, backendName) {
     if (window.NeBuLA) {
       window.NeBuLA._instance     = this._backend;
@@ -189,6 +253,13 @@ class RaBbLEEntityElement extends HTMLElement {
   }
 
   disconnectedCallback() {
+    if (this._alive) {
+      this._alive.dispose();
+      if (window.NeBuLA && window.NeBuLA._instance === this._alive) window.NeBuLA._instance = null;
+      this._alive = this._backend = null;
+      this._connected = false;
+      return;
+    }
     if (this._ro) this._ro.disconnect();
     window.removeEventListener('resize', this._resize);
     if (this._backend) this._backend.dispose();
