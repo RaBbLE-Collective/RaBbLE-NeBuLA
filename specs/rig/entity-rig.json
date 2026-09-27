@@ -1,0 +1,711 @@
+{
+  "rig": "entity",
+  "version": "1.1",
+  "viewBox": [
+    0,
+    0,
+    1600,
+    900
+  ],
+  "origin": [
+    800,
+    450
+  ],
+  "conventions": {
+    "pivots": "Every animatable group has data-pivot='x y' in its parent's coordinate space. Apply transforms as translate(p) op translate(-p).",
+    "transformOrder": "translate, then rotate, then scale, all about the pivot",
+    "hierarchy": "Children inherit parent transforms. entity > entity-body > portal-*, eye-* > eye-*-gaze > eye-*-lid",
+    "spawn": "Groups with data-spawn are empty containers. Engines instantiate the referenced template (#tpl-*) or generate geometry (bolt, ring, edge).",
+    "colors": "Presentation attributes only (no CSS), so importers that ignore stylesheets keep the look.",
+    "poles": "Every pole-colored element carries data-pole='a' or 'b'. To retheme or swap sides, recolor by data-pole; never by hex.",
+    "tiers": "Each layer carries data-tier (core, aura, environment). Engines may drop environment and aura; core must always render."
+  },
+  "palette": {
+    "poleA": "#00f5ff",
+    "poleB": "#ff2d78",
+    "violet": "#bf5fff",
+    "outrunPink": "#ff79c6",
+    "void": "#0a0010",
+    "deepestVoid": "#03000b",
+    "voidGlow": "#1a0030",
+    "eyeFill": "#f8faff",
+    "nebula": [
+      "#1a4aaa",
+      "#55aaff",
+      "#7744cc",
+      "#bb55dd",
+      "#00bbdd",
+      "#33ddf0",
+      "#ddeeff",
+      "#ccddff"
+    ],
+    "source": "RaBbLE-Aether SYSTEM-PROMPT.md / RaBbLE-Palette.md"
+  },
+  "hierarchy": {
+    "layer-entity": {
+      "defs#occlusion": [
+        "occlude-eye-left",
+        "occlude-eye-right"
+      ],
+      "entity": {
+        "entity-body": [
+          {
+            "portals": [
+              "portal-top",
+              "portal-bottom"
+            ]
+          },
+          "thoughts-top",
+          "thoughts-bottom",
+          {
+            "eye-left (clip-path occlude-eye-left)": {
+              "eye-left-gaze": {
+                "eye-left-lid": [
+                  "eye-left-halo",
+                  "eye-left-rim"
+                ]
+              }
+            }
+          },
+          {
+            "eye-right (clip-path occlude-eye-right)": {
+              "eye-right-gaze": {
+                "eye-right-lid": [
+                  "eye-right-halo",
+                  "eye-right-rim"
+                ]
+              }
+            }
+          },
+          "portal-top-rim-over (hidden while above its orb)",
+          "portal-bottom-rim-over"
+        ]
+      }
+    }
+  },
+  "parameters": [
+    {
+      "name": "entity.scale",
+      "target": "entity",
+      "property": "scale",
+      "range": [
+        0.6,
+        0.8
+      ],
+      "default": 0.7
+    },
+    {
+      "name": "entity.float",
+      "target": "entity-body",
+      "property": "translateY",
+      "unit": "px",
+      "range": [
+        -14,
+        14
+      ],
+      "default": 0,
+      "idle": "12*sin(1.05t)"
+    },
+    {
+      "name": "entity.tilt",
+      "target": "entity-body",
+      "property": "rotate",
+      "unit": "deg",
+      "range": [
+        -8,
+        8
+      ],
+      "default": 0
+    },
+    {
+      "name": "entity.breathe",
+      "target": "entity-body",
+      "property": "scale",
+      "range": [
+        0.98,
+        1.05
+      ],
+      "default": 1,
+      "note": "add heartbeat*0.008"
+    },
+    {
+      "name": "eye.gaze.x",
+      "target": [
+        "eye-left-gaze",
+        "eye-right-gaze"
+      ],
+      "property": "translateX",
+      "unit": "px",
+      "range": [
+        -26,
+        26
+      ],
+      "default": 0
+    },
+    {
+      "name": "eye.gaze.y",
+      "target": [
+        "eye-left-gaze",
+        "eye-right-gaze"
+      ],
+      "property": "translateY",
+      "unit": "px",
+      "range": [
+        -12,
+        12
+      ],
+      "default": 0
+    },
+    {
+      "name": "eye-left.blink",
+      "target": "eye-left-lid",
+      "property": "scaleY=1-0.95*v; scaleX=1+0.22*v",
+      "range": [
+        0,
+        1
+      ],
+      "default": 0
+    },
+    {
+      "name": "eye-right.blink",
+      "target": "eye-right-lid",
+      "property": "scaleY=1-0.95*v; scaleX=1+0.22*v",
+      "range": [
+        0,
+        1
+      ],
+      "default": 0,
+      "note": "lags left by 40 ms"
+    },
+    {
+      "name": "eye-left.squint",
+      "target": "eye-left-lid",
+      "property": "scaleY -= 0.45*v",
+      "range": [
+        0,
+        1
+      ],
+      "default": 0
+    },
+    {
+      "name": "eye-right.squint",
+      "target": "eye-right-lid",
+      "property": "scaleY -= 0.45*v",
+      "range": [
+        0,
+        1
+      ],
+      "default": 0
+    },
+    {
+      "name": "eye.widen",
+      "target": [
+        "eye-left-lid",
+        "eye-right-lid"
+      ],
+      "property": "scaleY += 0.14*v; scaleX += 0.06*v",
+      "range": [
+        0,
+        1
+      ],
+      "default": 0
+    },
+    {
+      "name": "eye-left.glow",
+      "target": "eye-left-halo",
+      "property": "opacity",
+      "range": [
+        0.3,
+        1
+      ],
+      "default": 0.55
+    },
+    {
+      "name": "eye-right.glow",
+      "target": "eye-right-halo",
+      "property": "opacity",
+      "range": [
+        0.3,
+        1
+      ],
+      "default": 0.55
+    },
+    {
+      "name": "portal-top.bob",
+      "target": "portal-top",
+      "property": "translateY",
+      "unit": "px",
+      "range": [
+        -16,
+        16
+      ],
+      "default": 0,
+      "idle": "-9*sin(1.57t)",
+      "note": "apply the same transform to the matching occlude-eye-*-shape"
+    },
+    {
+      "name": "portal-bottom.bob",
+      "target": [
+        "portal-bottom"
+      ],
+      "property": "translateY",
+      "unit": "px",
+      "range": [
+        -16,
+        16
+      ],
+      "default": 0,
+      "idle": "9*sin(1.57t)",
+      "note": "apply the same transform to the matching occlude-eye-*-shape"
+    },
+    {
+      "name": "portal-top.pulse",
+      "target": "portal-top",
+      "property": "scale",
+      "range": [
+        1,
+        1.12
+      ],
+      "default": 1,
+      "note": "apply the same transform to the matching occlude-eye-*-shape"
+    },
+    {
+      "name": "portal-bottom.pulse",
+      "target": [
+        "portal-bottom"
+      ],
+      "property": "scale",
+      "range": [
+        1,
+        1.12
+      ],
+      "default": 1,
+      "note": "apply the same transform to the matching occlude-eye-*-shape"
+    },
+    {
+      "name": "portal-top.spin",
+      "target": "portal-top-energy",
+      "property": "stroke-dashoffset",
+      "unit": "px",
+      "range": "unbounded",
+      "default": 0,
+      "idle": "-80*t"
+    },
+    {
+      "name": "portal-bottom.spin",
+      "target": "portal-bottom-energy",
+      "property": "stroke-dashoffset",
+      "unit": "px",
+      "range": "unbounded",
+      "default": 0,
+      "idle": "-80*t"
+    },
+    {
+      "name": "portal-top.glow",
+      "target": "portal-top-halo",
+      "property": "opacity",
+      "range": [
+        0.3,
+        1
+      ],
+      "default": 0.55
+    },
+    {
+      "name": "portal-bottom.glow",
+      "target": "portal-bottom-halo",
+      "property": "opacity",
+      "range": [
+        0.3,
+        1
+      ],
+      "default": 0.55
+    },
+    {
+      "name": "sphere.yaw",
+      "target": "layer-sphere",
+      "property": "3D reprojection",
+      "unit": "rad",
+      "range": "unbounded",
+      "default": 0,
+      "note": "meridian i: great circle at lon=data-lon+yaw; parallel j: small circle at data-lat"
+    },
+    {
+      "name": "sphere.pitch",
+      "target": "layer-sphere",
+      "property": "3D reprojection",
+      "unit": "rad",
+      "range": [
+        -0.1,
+        0.7
+      ],
+      "default": 0.3
+    },
+    {
+      "name": "sphere.roll",
+      "target": "layer-sphere",
+      "property": "3D reprojection",
+      "unit": "rad",
+      "range": [
+        -0.45,
+        0.15
+      ],
+      "default": -0.15
+    },
+    {
+      "name": "lens.amp",
+      "target": "lens-upper, lens-lower strands",
+      "property": "y = 450 -/+ data-amp*env(t)*v",
+      "range": [
+        0.9,
+        1.15
+      ],
+      "default": 1
+    },
+    {
+      "name": "lens.noise",
+      "target": "lens strands",
+      "property": "per-vertex y offset * env(t)",
+      "unit": "px",
+      "range": [
+        0,
+        24
+      ],
+      "default": 18
+    },
+    {
+      "name": "mesh.sway.left",
+      "target": "mesh-left",
+      "property": "translate",
+      "unit": "px",
+      "range": [
+        [
+          -30,
+          30
+        ],
+        [
+          -42,
+          42
+        ]
+      ],
+      "default": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "mesh.sway.right",
+      "target": "mesh-right",
+      "property": "translate",
+      "unit": "px",
+      "range": [
+        [
+          -30,
+          30
+        ],
+        [
+          -42,
+          42
+        ]
+      ],
+      "default": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "node.position",
+      "target": ".node",
+      "property": "cx/cy of all three circles = data-base + drift",
+      "unit": "px",
+      "range": "data-drift",
+      "note": "edges follow via data-from/data-to"
+    },
+    {
+      "name": "node.hot",
+      "target": ".node",
+      "property": "bloom r *= 1+v; ring stroke-width += 2v; incident edges brighten",
+      "range": [
+        0,
+        1
+      ],
+      "default": 0
+    },
+    {
+      "name": "grid.scroll",
+      "target": "grid-floor-rows, grid-ceiling-rows",
+      "property": "row y = horizon +/- 380/(data-z-depth - phase)",
+      "unit": "z",
+      "range": [
+        0,
+        0.55
+      ],
+      "default": 0,
+      "note": "phase wraps at 0.55"
+    },
+    {
+      "name": "haze.intensity",
+      "target": [
+        "haze-cyan",
+        "haze-pink"
+      ],
+      "property": "opacity",
+      "range": [
+        0.5,
+        1
+      ],
+      "default": 0.8
+    },
+    {
+      "name": "heartbeat",
+      "target": "haze-core, halos, entity-body",
+      "property": "lub-dub envelope added to opacity/scale",
+      "range": [
+        0,
+        1.6
+      ],
+      "default": 0,
+      "formula": "exp(-((p-.05)/.035)^2)+0.6*exp(-((p-.24)/.04)^2), p=phase%1, 46-110 bpm"
+    },
+    {
+      "name": "orbit-outer.angle",
+      "target": "orbit-outer",
+      "property": "dot i angle = i/n*2pi + v",
+      "unit": "rad",
+      "range": "unbounded",
+      "default": 0
+    },
+    {
+      "name": "orbit-inner.angle",
+      "target": "orbit-inner",
+      "property": "dot i angle = i/n*2pi + v",
+      "unit": "rad",
+      "range": "unbounded",
+      "default": 0
+    },
+    {
+      "name": "shock.progress",
+      "target": "fx-shockwave",
+      "property": "r = 60+950v; opacity = (1-v)^2",
+      "range": [
+        0,
+        1
+      ],
+      "default": 0
+    },
+    {
+      "name": "energy",
+      "target": "global",
+      "range": [
+        0,
+        1
+      ],
+      "default": 0,
+      "note": "raises glow, speeds grid/sphere/orbit, increases lens noise"
+    },
+    {
+      "name": "mood",
+      "target": "global",
+      "type": "enum",
+      "values": [
+        "idle",
+        "ponder",
+        "process",
+        "insight",
+        "curious"
+      ],
+      "default": "idle"
+    },
+    {
+      "name": "entity.poleSwap",
+      "target": "[data-pole]",
+      "property": "swap pole a and b colors",
+      "type": "bool",
+      "default": false
+    },
+    {
+      "name": "portal.flip",
+      "target": [
+        "portal-top",
+        "portal-bottom",
+        "occlude-eye-left-shape",
+        "occlude-eye-right-shape"
+      ],
+      "property": "mirror each portal to the other side of its eye (portal-top translateY 0 to +252, portal-bottom 0 to -252) and switch each eye's clip rule",
+      "range": [
+        0,
+        1
+      ],
+      "default": 0,
+      "note": "Aether spec: portals flip while listening"
+    },
+    {
+      "name": "portal.spread",
+      "target": [
+        "portal-top",
+        "portal-bottom"
+      ],
+      "property": "scale each portal's vertical offset from its eye (baseline 126 px, both sides)",
+      "range": [
+        1,
+        1.5
+      ],
+      "default": 1,
+      "note": "Aether spec: speaking exaggerates the asymmetry"
+    },
+    {
+      "name": "portal.visible",
+      "target": [
+        "portal-top",
+        "portal-bottom"
+      ],
+      "property": "display",
+      "type": "bool",
+      "default": true,
+      "note": "hidden portals remove occlusion: set the eye clip-path to none"
+    },
+    {
+      "name": "eye-left.drift",
+      "target": "eye-left-gaze",
+      "property": "translate, added to gaze",
+      "unit": "px",
+      "range": [
+        [
+          -20,
+          20
+        ],
+        [
+          -40,
+          40
+        ]
+      ],
+      "default": [
+        0,
+        0
+      ],
+      "note": "orbs can shift within their portals; vertical drift makes more or less of the orb disappear into the portal"
+    },
+    {
+      "name": "eye-right.drift",
+      "target": "eye-right-gaze",
+      "property": "translate, added to gaze",
+      "unit": "px",
+      "range": [
+        [
+          -20,
+          20
+        ],
+        [
+          -40,
+          40
+        ]
+      ],
+      "default": [
+        0,
+        0
+      ]
+    }
+  ],
+  "spawners": {
+    "#tpl-mote": {
+      "container": "particles-motes",
+      "count": 140,
+      "behavior": "flow-field drift, pulled and swirled into the orb, respawn when absorbed"
+    },
+    "#tpl-ember": {
+      "container": "particles-embers",
+      "count": 50,
+      "behavior": "rise from the floor, fade by the horizon"
+    },
+    "#tpl-pulse": {
+      "container": "mesh-pulses",
+      "behavior": "travel node to node along edges; inward toward the orb, outward during insight"
+    },
+    "bolt": {
+      "container": [
+        "fx-strikes",
+        "sphere-synapses"
+      ],
+      "behavior": "midpoint-displacement lightning; 3 strokes: width*5 @0.1, width*2.2 @0.3, white core"
+    },
+    "ring": {
+      "container": [
+        "thoughts-top",
+        "thoughts-bottom"
+      ],
+      "behavior": "ellipse matching the disc, grows 1.55x over 1.6 s while rising/sinking 80 px and fading"
+    },
+    "edge": {
+      "container": [
+        "mesh-left-synapses",
+        "mesh-right-synapses"
+      ],
+      "behavior": "temporary link between nodes within 250 px, fades in and out over 1.2-3.5 s"
+    }
+  },
+  "identity": {
+    "definingFeatures": [
+      "Two tall eyes with no pupils, ever",
+      "One portal disc per eye, always asymmetrical: one above its eye, one below",
+      "Two opposed color poles: each eye and its portal take one pole, the other side takes the other"
+    ],
+    "poles": {
+      "a": {
+        "token": "--rabble-cyan",
+        "name": "Electric Cyan",
+        "hex": "#00f5ff"
+      },
+      "b": {
+        "token": "--rabble-magenta",
+        "name": "Hot Magenta",
+        "hex": "#ff2d78"
+      },
+      "note": "Values shown are the original RaBbLE entity. Other entities supply their own pole pair. Poles may swap sides but are never the same color."
+    },
+    "tiers": {
+      "core": "Eyes and portals. Required.",
+      "aura": "Nebula, mesh, orb, lens, orbit, particles, fx. Optional, on-model when present.",
+      "environment": "Background and grid. Replaceable: void, synthwave grid, or any other scene."
+    }
+  },
+  "zOrderRule": "The eye whose portal is ABOVE it is drawn in front of that portal. The eye whose portal is BELOW it is drawn through it: that portal's front arc renders over the eye.",
+  "states": {
+    "idle": {
+      "portal.flip": 0,
+      "portal.spread": 1
+    },
+    "listening": {
+      "portal.flip": 1
+    },
+    "speaking": {
+      "portal.spread": 1.35
+    },
+    "thinking": {
+      "note": "maps to ponder/process in the live build"
+    }
+  },
+  "occlusion": {
+    "rule": "An orb never renders on top of its portal's outer rim where that would break the portal illusion. The rim is the clipping edge.",
+    "portalAbove": "The orb hangs out of the portal: visible inside the opening over the void and below it, drawn in front of the front rim. Clip = region below the inner edge of the rim's back (upper) arc. No rim overlay.",
+    "portalBelow": "The orb rises out of the portal: visible above it and inside the opening, down to the front rim. Clip = region above the rim's front (lower) arc, and the front-rim overlay draws over the orb.",
+    "rimOver": "A portal's front-rim overlay (portal-*-rim-over) is shown only while that portal is BELOW its orb. A portal ABOVE its orb never draws its rim over the orb. The rule follows position, not color or portal id.",
+    "implementation": "Each eye group has clip-path url(#occlude-eye-*). Apply the portal's transform (bob, pulse, flip, spread) to its clip shape and rim overlay every frame. Portal bodies render behind the orbs and active rim overlays in front, so draw order never changes.",
+    "flip": "When portal.flip moves a portal to the other side of its eye, switch that eye's clip rule between inside-and-below and inside-and-above, and show the rim overlay only on whichever portal is now below its orb."
+  },
+  "baseline": {
+    "source": "Live NeBuLA render (measured Sep 23, 2026)",
+    "eye": {
+      "widthToHeight": "1:3.1",
+      "equalSizes": true,
+      "level": true,
+      "centerSpacingEyeWidths": 2.1
+    },
+    "portal": {
+      "widthEyeWidths": 2.7,
+      "flatten": 0.3,
+      "offsetEyeHalfHeights": 0.93,
+      "symmetric": true,
+      "horizontalOffset": 0
+    },
+    "variance": "Orbs may shift and drift within their portals (eye-*.drift, eye.gaze); the baseline is the idle rest pose."
+  }
+}

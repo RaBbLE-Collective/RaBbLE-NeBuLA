@@ -17,11 +17,14 @@ new implementations can vary the medium and palette without losing identity.
 
 > A cluster of cool-blue stardust holding two bright **white-glowing eye-slits** —
 > one with a **magenta halo, portal slung low**; the other with a **cyan halo,
-> portal slung high**. The two eyes are never level. That asymmetry is the
-> character.
+> portal slung high**. The two orbs rest **level** with each other — it's their
+> **portals** that are always mismatched (one above its eye, one below, never
+> both on the same side), paired with the two eyes always taking **opposite
+> colors**. That portal asymmetry plus that color opposition is the character —
+> not the eyes' vertical position (ruling, 2026-09-26, see Revision History).
 
 If you remember nothing else: **white eyes, neon outline, mismatched portal
-heights.** Everything else is decoration.
+heights, opposed colors.** Everything else is decoration.
 
 ---
 
@@ -152,6 +155,14 @@ not in our dimension, and the two visible holes happen not to line up.
 
 It also gives the entity an **off-axis tilt** that reads as alert / attentive
 without any other animation.
+
+**On eye-leveling specifically:** the orbs sit level with each other at rest
+(zero-input idle pose) — this was always the geometry (see the Geometry
+summary table below), the TL;DR simply used to say the opposite. Once
+animated (gaze drift, saccades, mood), the orbs may float slightly off that
+shared line — leveling is the rest pose, not an enforced constraint either
+way. Portal asymmetry and color opposition are the invariants; eye height is
+not.
 
 ### Don't confuse the two parts
 
@@ -292,9 +303,99 @@ appear instantly at rest.
 
 ### Entity states
 
-The entity exposes three states (`idle | thinking | speaking`) that
-modulate the waveform amplitude / frequency (when shown). The waveform is
-disabled in the stable build, so for most purposes you can ignore states.
+The live NeBuLA renderer currently exposes three states (`idle | thinking |
+speaking`) that modulate the waveform amplitude / frequency (when shown). The
+waveform is disabled in the stable build, so for most purposes you can
+ignore states in the *current* implementation — but see below for the
+reconciled state model this doc now specifies going forward.
+
+#### Reconciled mood + Aether-state model (2026-09-26, from the animation rig)
+
+The entity moves through five **moods**, on its own, rather than firing at
+random:
+
+```
+Idle → Ponder → Process (70%) → Insight (60%) → Idle
+Ponder → Idle (30%)      Process → Ponder (40%)
+Idle/Ponder → Curious (cursor or touch) → Idle (2.5s without input)
+```
+
+Curious can interrupt any mood except Insight.
+
+| Mood | Lasts | Eyes | Surroundings |
+|---|---|---|---|
+| Idle | 4–8s | slow wander, small random glances | normal lightning, rare big shockwave |
+| Ponder | 5–9s | look up/aside, head tilts that way, that eye squints more | activation waves roll inward, rings rise/sink through portals, orb slows |
+| Process | 3–5s | quick darting glances, like reading | synapse sparks inside orb, faster pulses, orb spins/brightens |
+| Insight | 2.8s | go wide, then squint + blink | center flash, pulses/bolts stream to horizons |
+| Curious | while interacting | track cursor/finger, head tilts toward it | mesh nodes push away from pointer |
+
+Separately, the **Aether states** (`idle | listening | speaking`) drive the
+portal-flip behavior on top of whichever mood is active:
+
+| State | Portals |
+|---|---|
+| Idle | resting asymmetry — one above its eye, one below |
+| Listening | flip — the portal above moves below, and vice versa |
+| Speaking | both move further from their eyes, exaggerating the asymmetry |
+
+**`listening` is a newly-defined Aether state as of this revision** — the
+live renderer only implements `idle | thinking | speaking` today. Wiring
+`listening` (and the five-mood layer above it) into
+`RaBbLE-NeBuLA/src/backends/canvas2d-backend.js` + `eye-behavior.js` is real
+feature work, not yet done — treat this section as the target spec for that
+future session, not a description of current behavior.
+
+Other event-driven reactions (apply in any mood): lightning strike (both
+eyes snap toward the impact, that side's eye flinches/recoils/flares),
+shockwave (widen + flare, then squint + double-blink ~0.5s later), high
+energy (dilate, brighter glow, tremble, more frequent blinks), heartbeat
+(46–110 bpm pulse on the core glow/halos depending on excitement).
+
+---
+
+## Animation rig (machine-readable manifest)
+
+As of 2026-09-26 the entity has a script-free SVG rig plus a JSON parameter
+manifest, living in `RaBbLE-NeBuLA/specs/rig/`:
+
+- **`entity-rig.svg`** — every moving part is a named group carrying
+  `data-pivot="x y"` (in its parent's coordinate space). Apply transforms as
+  translate-to-pivot → rotate/scale → translate-back. Hierarchy nests:
+  `entity > entity-body > eye-left (clipped) > eye-left-gaze > eye-left-lid`,
+  so a blink never fights a glance.
+- **`entity-rig.json`** — lists every parameter (target group, what it
+  drives, range) and the palette, keyed to the same group ids.
+- **`entity-rig-demo.html`** — a complete, working reference render driving
+  the rig (mood state machine, lightning/shockwave events, adaptive
+  frame-budget quality scaling). Reference only — not wired into the
+  production Canvas2D/Three.js backends.
+
+Rig conventions worth knowing before touching any of the three files:
+
+- **Poles**: every pole-colored element carries `data-pole="a"` or `"b"`.
+  Recolor by pole, never by hex — this is what lets an entity's colors swap
+  sides or re-theme without touching geometry.
+- **Tiers**: every layer carries `data-tier` (`core`, `aura`, or
+  `environment`). Core (eyes + portals) must always render; aura (nebula,
+  wireframe orb, orbit rings, lightning lens, neural mesh, particles) is
+  optional but on-model; environment (background, grid) is replaceable.
+- **Spawners**: empty groups with `data-spawn` are where an engine
+  instantiates particles/bolts/thought-rings/synapses from `<defs>` templates
+  (`#tpl-mote`, `#tpl-ember`, `#tpl-spark`, `#tpl-flash`, `#tpl-pulse`).
+- **Occlusion**: each eye clips via `clip-path="url(#occlude-eye-*)"`; each
+  portal has a front-rim overlay (`portal-*-rim-over`) drawn after the orb,
+  active only while that portal is below its orb. This follows the portal's
+  *position*, not its color, so it holds when poles swap or portals flip.
+- **Porting notes**: plain JS/GSAP/anime.js can inline the SVG and drive
+  groups by id directly (works as-is). Rive/Lottie/Unity/Godot/Unreal need
+  the procedural parts (mesh, lightning, particles, sphere) regenerated
+  in-engine from the manifest's formulas — the rig stores base shapes and
+  regeneration formulas for those, not baked frames.
+
+Full guide (proportions reconciliation, glow-construction recipes, blink
+timing, do/don't table): `The Entity: Visual Guide and Animation Rig`,
+archived in `RaBbLE-BaBbLE/reliquary/2026-09-26-entity-harness/`.
 
 ---
 
@@ -376,6 +477,30 @@ recognizable. Items 4-6 are atmosphere.
   `EntityCreature` in `grimoire-variants.jsx` — useful as a worked example
   of the geometry table scaled to a 60×40 viewBox.
 - Brand mark (related but not the same thing): `aether/assets/RaBbLE-OS_ICON.png`
+- Animation rig + reference engine (2026-09-26): `RaBbLE-NeBuLA/specs/rig/`
+  (`entity-rig.svg`, `entity-rig.json`, `entity-rig-demo.html`) — see
+  "Animation rig" section above.
+- Full visual guide + an alternate non-canonical concept render: archived in
+  `RaBbLE-BaBbLE/reliquary/2026-09-26-entity-harness/`.
+
+---
+
+## Revision History
+
+- **2026-09-26** — Integrated the entity animation rig (`entity-rig.svg` /
+  `.json` / demo engine) and its accompanying guide. Added the reconciled
+  five-mood behavior model + `listening` Aether state (new — not yet
+  implemented in the live renderer) and the "Animation rig" section.
+  **Resolved a standing inconsistency**: this doc's own detailed geometry
+  section always specified the eye orbs as level with each other (shared
+  horizontal centerline, only the portals mismatched) — but the TL;DR
+  headline said "the two eyes are never level," contradicting it. Mark's
+  ruling on review: portal asymmetry (always one above/one below, never
+  both the same side) and eye/portal color opposition are the
+  character-defining, invariant traits — not eye vertical position. Eyes
+  rest level at zero-input idle and may drift once animated, but leveling
+  itself is not an enforced rule either way. TL;DR and the asymmetric-
+  placement section updated to state this correctly and consistently.
 
 ---
 
