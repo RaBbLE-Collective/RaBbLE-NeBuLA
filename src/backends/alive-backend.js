@@ -20,6 +20,7 @@
 import { ensureThree, hasWebGL } from '../utils/three-loader.js';
 import { installFatLines } from '../utils/three-fatlines.js';
 import { readPalette } from '../puppet/palette.js';
+import { createGLContext2D } from './alive-gl.js';
 import { version as VERSION } from '../version.js';
 
 const STYLE_ID = 'rbl-alive-style';
@@ -82,13 +83,14 @@ export const ALIVE_EMOTIONS = ['calm', 'joy', 'sad', 'angry'];
  * @param {string}  [opts.tagline]            boot tagline text
  * @param {string}  [opts.readyLine]          final boot log line
  * @param {string}  [opts.portalA] [opts.portalB]  palette names for the two poles (default cyan / magenta)
+ * @param {'webgl'|'2d'} [opts.renderer='webgl'] 2D scene renderer; 'webgl' falls back to '2d' if unavailable
  * @returns {Object} backend API (see bottom of this function)
  */
 export function createAlive(host, opts = {}) {
 injectStyle();
 const stage = document.createElement('div');
 stage.className = 'rbl-alive';
-stage.innerHTML = '<canvas data-r="cv"></canvas><canvas data-r="cv3" style="display:none"></canvas>' +
+stage.innerHTML = '<canvas data-r="cvg"></canvas><canvas data-r="cv"></canvas><canvas data-r="cv3" style="display:none"></canvas>' +
   '<div class="rbl-fx rbl-scan"></div><div class="rbl-fx rbl-chroma"></div><div class="rbl-fx rbl-vig"></div>' +
   '<div data-r="bootui" class="rbl-bootui"><div data-r="wordmark" class="rbl-wordmark">RaBbLE</div>' +
   '<div data-r="tagline" class="rbl-tagline">Low Entropy. Infinite Resonance.</div>' +
@@ -155,11 +157,18 @@ let poleL=C.a,poleR=C.b; // pole A left by default; setPortals() recolors
 function rgba(hex,a){const n=parseInt(hex.slice(1),16);return `rgba(${n>>16},${(n>>8)&255},${n&255},${a})`;}
 
 // ============================================================ canvas + camera
-const cv=$("cv"),cv3=$("cv3"),ctx2d=cv.getContext("2d");let ctx=ctx2d;
-let W=0,H=0,DPR=1,dprCap=3,cam={s:1,ox:0,oy:0,vw:1600,vh:900};
+const cv=$("cv"),cv3=$("cv3"),cvg=$("cvg"),ctx2d=cv.getContext("2d");let ctx=ctx2d;
+// 2D scene on WebGL by default (alive-gl.js): Canvas2D rasters on the CPU in some browsers (Firefox/Linux ~11 fps at 4K).
+// The face keeps its Canvas2D renderer on a small offscreen canvas, uploaded as a texture each frame (as the 3D decal does).
+const glc=opts.renderer==="2d"?null:createGLContext2D(cvg);
+const fcv=document.createElement("canvas"),fctx2=fcv.getContext("2d");
+let P2D=Path2D; // swapped to the GL path recorder while the GL renderer draws
+(glc?cv:cvg).style.display="none";
+const view=()=>stage.getBoundingClientRect();
+let W=0,H=0,DPR=1,dprCap=glc?2:3,cam={s:1,ox:0,oy:0,vw:1600,vh:900};
 function resize(){
-  const r=cv.getBoundingClientRect();W=Math.max(1,r.width);H=Math.max(1,r.height);
-  DPR=Math.min(window.devicePixelRatio||1,dprCap);cv.width=Math.round(W*DPR);cv.height=Math.round(H*DPR);
+  const r=view();W=Math.max(1,r.width);H=Math.max(1,r.height);
+  DPR=Math.min(window.devicePixelRatio||1,dprCap);const tc=glc?cvg:cv;tc.width=Math.round(W*DPR);tc.height=Math.round(H*DPR);
   const a=W/H;cam.vw=a>=1.3?1600:a>=1?1300:a>=.75?1150:1000;cam.vh=cam.vw/a;
   if(a>=1.3&&cam.vh<900){/* very wide: keep full height */cam.vh=Math.max(cam.vh,720);cam.vw=cam.vh*a;}
   readSafe();cam.s=W/cam.vw;cam.ox=(W+SAFE.l-SAFE.r)/2-800*cam.s;cam.oy=(H+SAFE.t-SAFE.b)/2-450*cam.s;layoutUI();
@@ -381,7 +390,7 @@ function drawGrid(dt){
   const xs=[],x0=Math.floor(-EXT/RAY)*RAY;for(let x=x0;x<=EXT;x+=RAY)xs.push(x-off);
   const zR=breaks(-14000,Cz-80,-2600,2600,150,900),xR=breaks(-EXT,EXT,-2600,2600,130,700),zRows=[];for(let z=-14000;z<Cz-80;z+=ROW)zRows.push(z);
   for(const [sg,col,op] of [[1,C.pink,.75],[-1,C.a,.5]]){
-    const bands=[];for(let b=0;b<BANDS;b++)bands.push(new Path2D());
+    const bands=[];for(let b=0;b<BANDS;b++)bands.push(new P2D());
     const Y=(x,z)=>sg>0?-GAP-well3(x,z):GAP+well3(x,z);
     const add=(a,b)=>{if(!a||!b)return;const d=(a[2]+b[2])/2,bi=Math.min(BANDS-1,Math.floor(Math.pow(d/12000,.6)*BANDS));bands[bi].moveTo(a[0],a[1]);bands[bi].lineTo(b[0],b[1]);};
     for(const x of xs){let prev=null;for(const z of zR){const p=proj(x,Y(x,z),z);add(prev,p);prev=p;}}
@@ -430,7 +439,7 @@ function drawSphere(dt,draw){
    for(const [col,a0,a1] of [[poleL,Math.PI/2,Math.PI*1.5],[poleR,-Math.PI/2,Math.PI/2]]){ctx.strokeStyle=col;
      ctx.globalAlpha=.3*glr;ctx.lineWidth=10;ctx.beginPath();ctx.arc(E.x,E.y,rr,a0,a1);ctx.stroke();ctx.globalAlpha=.85*glr;ctx.lineWidth=2.2;ctx.beginPath();ctx.arc(E.x,E.y,rr,a0,a1);ctx.stroke();}
    ctx.lineWidth=1.5;}
-  const backP=new Path2D(),aP=new Path2D(),bP=new Path2D();
+  const backP=new P2D(),aP=new P2D(),bP=new P2D();
   circles.forEach((c,ci)=>{
     // boot: latitudes scan in from the equator, meridians sweep in
     const reveal=boot.done?1:seg(on,(c.kind==="p"?Math.abs(c.i-2)*.12:.25+c.i*.08),(c.kind==="p"?Math.abs(c.i-2)*.12+.4:.25+c.i*.08+.45));if(reveal<=0)return;
@@ -468,7 +477,7 @@ function drawMesh(dt,draw){
     const lp=boot.done?1:seg(on,(n.layer)*.18,(n.layer)*.18+.3);if(lp>0&&n.pop<1&&n.pop===0){n.hot=1;}n.pop=lp;
   }
   if(!draw)return;
-  for(const sd of [-1,1]){const col=sd<0?poleL:poleR;const base=new Path2D(),hot=new Path2D();
+  for(const sd of [-1,1]){const col=sd<0?poleL:poleR;const base=new P2D(),hot=new P2D();
     for(const e of edges){if(e.a.side!==sd)continue;const vis=Math.min(e.a.layer<0?1:e.a.pop,e.b.pop);if(vis<=0)continue;
       const A=nodeWorld(e.a),B=nodeWorld(e.b),bx=lerp(A.x,B.x,vis),by=lerp(A.y,B.y,vis);base.moveTo(A.x,A.y);base.lineTo(bx,by);if(Math.max(e.a.hot,e.b.hot)>.25){hot.moveTo(A.x,A.y);hot.lineTo(bx,by);}}
     ctx.strokeStyle=col;ctx.globalAlpha=.13*sty.dim;ctx.lineWidth=7;ctx.stroke(base);ctx.globalAlpha=(.55+energy*.2)*sty.dim;ctx.lineWidth=1.6;ctx.stroke(base);
@@ -497,7 +506,7 @@ function drawLens(dt,draw){
   jitT-=dt;const rej=jitT<=0;if(rej)jitT=.14;const k=1-Math.pow(.004,dt);
   for(const st of strands){
     for(let i=0;i<=90;i++){if(rej)st.jt[i]=(Math.random()*2-1)*(Math.random()<.05?9:2.5)*(1+energy)*sty.jit;st.jit[i]+=(st.jt[i]-st.jit[i])*k;}
-    const path=draw?new Path2D():null;st.pts=[];
+    const path=draw?new P2D():null;st.pts=[];
     // boot: strands draw in from both horizons toward the center
     const reach=easeOut(on);let started=false;
     for(let i=0;i<=90;i++){const t=i/90;if(Math.abs(t-.5)<(1-reach)*.5)continue;const env=Math.pow(Math.sin(Math.PI*t),1.6);
@@ -530,7 +539,7 @@ function drawMotes(dt){
 }
 function drawFx(dt,draw){
   for(const b of bolts){if(b.life<=0)continue;b.life-=dt;b.rej-=dt;if(b.rej<=0||!b.pts){b.pts=jag(b.x0,b.y0,b.x1,b.y1,b.rough,6);b.rej=.045;}
-    b.k=clamp(b.life/b.max,0,1)*(Math.random()<.2?.35:1);if(!draw)continue;const path=new Path2D();b.pts.forEach((p,i)=>i?path.lineTo(p[0],p[1]):path.moveTo(p[0],p[1]));const k=b.k;
+    b.k=clamp(b.life/b.max,0,1)*(Math.random()<.2?.35:1);if(!draw)continue;const path=new P2D();b.pts.forEach((p,i)=>i?path.lineTo(p[0],p[1]):path.moveTo(p[0],p[1]));const k=b.k;
     ctx.strokeStyle=b.col;ctx.globalAlpha=.1*k;ctx.lineWidth=b.w*5;ctx.stroke(path);ctx.globalAlpha=.3*k;ctx.lineWidth=b.w*2.2;ctx.stroke(path);ctx.strokeStyle=C.eye;ctx.globalAlpha=k;ctx.lineWidth=b.w;ctx.stroke(path);}
   for(const f of flashes){if(f.life<=0)continue;f.life-=dt;const p=1-Math.max(0,f.life)/.35;f.p=p;if(!draw)continue;halo(f.x,f.y,(12+70*p)*f.size,(12+70*p)*f.size,0,C.eye,(1-p)*(1-p));}
   for(const r of rings){if(r.life<=0)continue;r.life-=dt/1.2;const p=1-r.life;r.p=p;if(!draw)continue;ctx.strokeStyle=r.col;ctx.globalAlpha=(1-p)*(1-p)*.9;ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(r.x,r.y,(20+300*p)*r.size,(20+300*p)*r.size*.62,0,0,TAU);ctx.stroke();}
@@ -591,6 +600,17 @@ function drawFace(){
   renderFaceCore(G.g);ctx.restore();ctx.globalAlpha=1;
 }
 
+// face for the GL renderer: same rig + occlusion via renderFaceCore, on an offscreen canvas sized to the face box
+function drawFaceGL(){
+  const G=faceGeom();if(boot.t<BOOT.portalArc[0]&&!boot.done)return;const B=faceBody();
+  const size=820*.7*E.s*cam.s*DPR,S=Math.min(2048,Math.max(64,Math.ceil(size/64)*64));
+  if(fcv.width!==S){fcv.width=fcv.height=S;}
+  const k=S/820;ctx=fctx2;ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,S,S);
+  ctx.translate(S/2,S/2);ctx.rotate((head.tilt.v+moodFx.tilt)*Math.PI/180);ctx.translate(0,B.y/.7*k);ctx.scale(k*B.sx,k*B.sy);
+  renderFaceCore(G.g);ctx=glc;
+  const cx=DPR*(cam.ox+E.x*cam.s),cy=DPR*(cam.oy+E.y*cam.s);glc.drawTexture(fcv,cx-size/2,cy-size/2,size,size);
+}
+
 // ============================================================ boot text column (DOM)
 const bootui=$("bootui"),wm=$("wordmark"),tag=$("tagline"),logEl=$("log"),barI=$("bar").firstElementChild,pct=$("pct");
 if(opts.tagline!=null)tag.textContent=opts.tagline;
@@ -640,7 +660,9 @@ function layoutUI(){
   const lh=Math.max(14,fsz*.33);logEl.style.height=(lh*5)+"px";logEl.dataset.lh=lh;
   const uh=H-SAFE.t-SAFE.b; // usable height between the Dynamic Island / status bar and the home indicator
   if(portrait()){const topPx=SAFE.t+uh*.6;Object.assign(bootui.style,{left:(SAFE.l+W*.08)+"px",right:(SAFE.r+W*.08)+"px",top:topPx+"px",width:"auto",alignItems:"center"});}
-  else{const cx=SAFE.l+.62*(W-SAFE.l-SAFE.r);Object.assign(bootui.style,{left:(cx-Math.min(W*.3,440))+"px",width:Math.min((W-SAFE.l-SAFE.r)*.6,880,W-SAFE.r-(cx-Math.min(W*.3,440)))+"px",top:(SAFE.t+uh*.33)+"px",right:"auto",alignItems:"flex-start"});}
+  else{const cx=SAFE.l+.62*(W-SAFE.l-SAFE.r),bp=bootPlace(),orbRight=cam.ox+(bp.x+270*bp.s)*cam.s; // keep the text off the booting orb
+    const left=Math.max(cx-Math.min(W*.3,440),orbRight+12);
+    Object.assign(bootui.style,{left:left+"px",width:Math.max(120,Math.min((W-SAFE.l-SAFE.r)*.6,880,W-SAFE.r-16-left))+"px",top:(SAFE.t+uh*.33)+"px",right:"auto",alignItems:"flex-start"});}
   $("bar").style.width=portrait()?"80%":"70%";
   logLines.forEach((l,i)=>place(l,i));
 }
@@ -731,7 +753,7 @@ function startBoot(list){
 
 // ============================================================ interaction
 function speak(){mind.talkT=0;setExpr("speaking");}
-function onPoint(e){const r=cv.getBoundingClientRect(),px=e.clientX-r.left,py=e.clientY-r.top;
+function onPoint(e){const r=view(),px=e.clientX-r.left,py=e.clientY-r.top;
   if(mode==="3d"&&T3.ready){const q=T3.toWorld(px,py);pointer.wx=q.x;pointer.wy=q.y;}else{const w=toWorld(px,py);pointer.wx=w.x;pointer.wy=w.y;}
   pointer.t=time;pointer.active=true;pointer.sx=px;pointer.sy=py;}
 let holdTimer=null;
@@ -762,7 +784,7 @@ function pMove(e){
 function pUp(e){touches.delete(e.pointerId);if(touches.size<2)pinch0=0;drag.on=false;if(drag.moved){pointer.down=false;drag.moved=false;return;}release();}
 const trackWindow=opts.trackWindow!==false; // World overlays chat UI on the canvas: read the pointer from the window
 if(opts.interactive!==false){
-  for(const el of [cv,cv3]){on(el,"pointerdown",pDown);on(el,"pointermove",pMove);on(el,"pointerup",pUp);on(el,"pointercancel",pUp);if(!trackWindow)on(el,"pointerleave",()=>{pointer.active=false;});}
+  for(const el of [cv,cvg,cv3]){on(el,"pointerdown",pDown);on(el,"pointermove",pMove);on(el,"pointerup",pUp);on(el,"pointercancel",pUp);if(!trackWindow)on(el,"pointerleave",()=>{pointer.active=false;});}
   on(cv3,"wheel",e=>{e.preventDefault();T3.zoom=clamp(T3.zoom*Math.exp(e.deltaY*.001),.45,1.9);},{passive:false});
   if(trackWindow){on(window,"pointermove",e=>{if(boot.dormant)return;onPoint(e);interact();},{passive:true});on(document,"pointerleave",()=>{pointer.active=false;});}
 }
@@ -812,7 +834,7 @@ function setMode(m){
       try{init3D();T3.ready=true;setMode("3d");if(!T3.fat)toast("thin-line fallback");}catch(err){console.error("[rabble-entity alive]",err);toast("3D failed to start");}T3.loading=false;})
       .catch(()=>{T3.loading=false;toast("3D engine failed to load");});
     return;}
-  mode=m;cv3.style.display=m==="3d"?"block":"none";cv.style.display=m==="3d"?"none":"block";
+  mode=m;cv3.style.display=m==="3d"?"block":"none";(glc?cvg:cv).style.display=m==="3d"?"none":"block";
   if(m==="3d"){T3.resize();toast("drag to orbit · pinch or scroll to zoom");}else resize();emitState();
 }
 function init3D(){
@@ -1023,6 +1045,8 @@ function init3D(){
 
 // ============================================================ main loop with adaptive quality
 let quality=1,emaDt=1/60,slowT=0;
+// opt-in per-stage CPU timing (ms, EMA) for the GL 2D path: opts.profile, surfaced in getSnapshot().profile
+const PROF=!!opts.profile,prof={grid:0,field:0,face:0,submit:0};
 function frame(now){
   rafId=0;if(disposed||paused)return;
   if(last===null)last=now;const raw=(now-last)/1000;let dt=Math.min(.05,raw);last=now;if(reduce)dt*=.4;time+=dt;
@@ -1030,7 +1054,7 @@ function frame(now){
   // Thin particles first; lower resolution only as a last resort and never below 2x on high-density screens.
   if(raw>0&&raw<.5&&time>3){emaDt=emaDt*.95+raw*.05;if(emaDt>.045){slowT+=raw;if(slowT>2){slowT=0;
     if(quality>.5)quality=Math.max(.5,quality-.15);
-    else{const floor=Math.min(window.devicePixelRatio||1,2);if(dprCap>floor+.01){dprCap=Math.max(floor,dprCap-.5);resize();}}}}else slowT=0;}
+    else{const floor=1;if(dprCap>floor+.01){dprCap=Math.max(floor,Math.min(dprCap,window.devicePixelRatio||1)-.5);resize();}}}}else slowT=0;}
   stepStyle(dt);wellStep();ltime+=dt*sty.tempo;travel+=dt*420*(1+energy*.8)*(boot.done?1:seg(boot.t,.5,3));orbitAng+=dt*(sty.orbit+energy*1.5);
   energy=Math.max(sty.energy,energy-dt*.45);
   bootStep(dt);bootUI();if(boot.done&&mode==="2d"){E.s+=(finalS()-E.s)*(1-Math.pow(.05,dt));}autoTick();updateEyes(dt);stepSprings(dt);heartbeat(dt);events(dt);
@@ -1038,6 +1062,16 @@ function frame(now){
     E.x=800;E.y=450;E.s=1;E.w=1;
     drawMesh(dt,false);drawSphere(dt,false);drawLens(dt,false);drawPulses(dt,false);drawFx(dt,false);
     T3.frame(dt);
+  }else if(glc){
+    const t0=PROF?performance.now():0;
+    ctx=glc;P2D=glc.Path2D;glc.beginFrame();ctx.setTransform(DPR,0,0,DPR,0,0);drawBackground();drawGrid(dt);
+    const t1=PROF?performance.now():0;
+    ctx.setTransform(DPR*cam.s,0,0,DPR*cam.s,DPR*cam.ox,DPR*cam.oy);
+    ctx.globalCompositeOperation="lighter";
+    drawStars(dt);drawHaze();drawMotes(dt);drawMesh(dt,true);drawBokeh();drawSphere(dt,true);drawLens(dt,true);drawPulses(dt,true);drawOrbits();drawFx(dt,true);
+    const t2=PROF?performance.now():0;
+    ctx.globalCompositeOperation="source-over";drawFaceGL();const t3=PROF?performance.now():0;glc.endFrame();ctx=ctx2d;P2D=Path2D;
+    if(PROF){const t4=performance.now(),k=.05;prof.grid+=(t1-t0-prof.grid)*k;prof.field+=(t2-t1-prof.field)*k;prof.face+=(t3-t2-prof.face)*k;prof.submit+=(t4-t3-prof.submit)*k;}
   }else{
     ctx=ctx2d;ctx.setTransform(DPR,0,0,DPR,0,0);drawBackground();drawGrid(dt);
     ctx.setTransform(DPR*cam.s,0,0,DPR*cam.s,DPR*cam.ox,DPR*cam.oy);
@@ -1146,7 +1180,7 @@ const api = {
     else { const k = E.s * .7; spawnSpark(E.x - 92 * k, E.y - 126 * k, 10, poleL); spawnSpark(E.x + 92 * k, E.y + 126 * k, 10, poleR); }
   },
   /** Glance at a viewport point (clientX/clientY), e.g. the chat input. */
-  attend(x, y, dur = .9) { const r = cv.getBoundingClientRect(), w = toWorld(x - r.left, y - r.top); eye.attn = { x: w.x, y: w.y, until: time + dur }; },
+  attend(x, y, dur = .9) { const r = view(), w = toWorld(x - r.left, y - r.top); eye.attn = { x: w.x, y: w.y, until: time + dur }; },
   setDimension(d) { if (d === '3d' || d === '2d') setMode(d); },
   get dimension() { return mode; },
   pause() { if (paused) return; paused = true; if (rafId) cancelAnimationFrame(rafId); rafId = 0; },
@@ -1158,13 +1192,14 @@ const api = {
     listeners.forEach(([t, ev, fn, o]) => t.removeEventListener(ev, fn, o)); listeners.length = 0;
     if (ro) ro.disconnect();
     if (T3.renderer) { T3.renderer.dispose(); if (T3.renderer.forceContextLoss) T3.renderer.forceContextLoss(); }
+    if (glc) glc.dispose();
     stage.remove();
   },
   getSnapshot() {
     return { backend: 'alive', state: stateS, mood: moodS.name, emotion, dimension: mode, energy,
       boot: { started: !boot.dormant, t: boot.t, holding: boot.holding, ready: boot.readyFired, done: boot.done,
         steps: steps.map(s => ({ id: s.id, settled: s.settled, ok: s.ok })) },
-      portals: { a: poleL, b: poleR }, quality };
+      portals: { a: poleL, b: poleR }, quality, renderer: glc ? 'webgl' : '2d', profile: PROF ? Object.fromEntries(Object.entries(prof).map(([k, v]) => [k, +v.toFixed(2)])) : null };
   },
   // ---- legacy <rabble-entity> surface (Canvas2dBackend / ThreeJsBackend callers)
   setEntityState(s) { setState(s === 'thinking' ? 'thinking' : s); if (s === 'idle' && moodS.name === 'process' && moodS.until === Infinity) enterMood('idle'); },

@@ -8,8 +8,11 @@ import { createRequire } from 'node:module';
 import { mkdirSync } from 'node:fs';
 const { chromium, devices } = createRequire(import.meta.url)(process.env.PLAYWRIGHT || 'playwright');
 const BASE = 'http://localhost:8080/examples/alive.html';
-const OUT = new URL('./shots/', import.meta.url).pathname; mkdirSync(OUT, { recursive: true });
-const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const OUT = process.env.SHOTS || new URL('./shots/', import.meta.url).pathname; mkdirSync(OUT, { recursive: true });
+// GPU=1 uses the real GPU (fast); default is swiftshader (portable, slow: every wait is on entity state).
+const browser = await chromium.launch({ args: process.env.GPU
+  ? ['--enable-gpu', '--ignore-gpu-blocklist', '--use-angle=vulkan', '--enable-features=Vulkan']
+  : ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const results = [];
 const check = (name, ok, info = '') => { results.push(`${ok ? 'PASS' : 'FAIL'}  ${name}${info ? '  · ' + info : ''}`); console.log(results.at(-1)); };
 const shot = (page, name) => page.screenshot({ path: OUT + name, timeout: 90000 });

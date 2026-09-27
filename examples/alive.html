@@ -34,6 +34,10 @@
   <b>fx</b><button data-pulse="spark">spark</button><button data-pulse="bolt">bolt</button><button data-pulse="ring">ring</button><button data-pulse="shock">shock</button>
   <button id="dim">3D</button>
 </div>
+<script>
+  // attributes read at mount must be set before NeBuLA upgrades the element (?renderer=2d compares the Canvas2D path)
+  (function () { var q = new URLSearchParams(location.search), el = document.getElementById('e'); if (q.get('renderer')) el.setAttribute('renderer', q.get('renderer')); if (q.get('profile')) el.setAttribute('profile', 'true'); })();
+</script>
 <script src="/nebula/v0.0.0.0/nebula.iife.js"></script>
 <script>
 (function () {

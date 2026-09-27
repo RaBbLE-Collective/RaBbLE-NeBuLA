@@ -15,7 +15,7 @@
  *
  * HTML attributes:
  *   backend         'canvas2d'|'threejs'|'alive'  default: 'canvas2d'
- *   alive only: autoboot, autonomous, dimension ('2d'|'3d'), track-window, hold-to-listen,
+ *   alive only: autoboot, autonomous, dimension ('2d'|'3d'), renderer ('webgl'|'2d'), track-window, hold-to-listen,
  *               skippable, step-timeout, tagline, ready-line, portal-a, portal-b,
  *               state, mood, emotion (live: changing these attributes drives the entity)
  *   mode           'idle'|'boot'   default: 'idle'
@@ -219,6 +219,8 @@ class RaBbLEEntityElement extends HTMLElement {
       readyLine:    a('ready-line') || undefined,
       portalA:      a('portal-a') || undefined,
       portalB:      a('portal-b') || undefined,
+      renderer:     a('renderer') || undefined,
+      profile:      parseBool(a('profile'), false),
     });
     if (a('emotion')) this._alive.setEmotion(a('emotion'));
     if (a('mood')) this._alive.setMood(a('mood'));
