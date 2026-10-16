@@ -19,14 +19,14 @@ graphs. No rigid hierarchies. Order emerges from controlled chaos.
 The philosophy behind NeBuLA — entropy-driven development, emergence over design, the maker
 spirit — lives in the **RaBbLE Grimoire**.
 
-See: [`RaBbLE-Grimoire`](../RaBbLE-Grimoire)
+See: [`RaBbLE-Grimoire`](https://github.com/RaBbLE-Collective/RaBbLE-Grimoire)
 
 ## Branches
 
 | Branch | Purpose |
 |--------|---------|
-| `main` | Orientation (you are here) |
-| `dev`  | Active implementation scaffold |
+| `main` | Orientation stub |
+| `new-horizons` | Active development |
 
 ## Quick Start
 
@@ -43,5 +43,14 @@ runtime.start();
 
 ## Status
 
-Active development. See `dev` branch for current scaffold and `docs/` for architecture
-analysis and implementation roadmap.
+Active development on `new-horizons`. Architecture and roadmap live in the Grimoire:
+`RaBbLE-Grimoire/RaBbLE-NeBuLA/`.
+
+## License
+
+RaBbLE-NeBuLA is licensed under the **RaBbLE Sovereign Accord** (source-available, not open source): see [`LICENSE`](LICENSE).
+
+- **Personal use:** Encouraged. Modify, fork, create.
+- **Attribution:** Keep the lineage intact. Mention RaBbLE.
+- **Commercial use:** Reserved. Contact the Copyright Holder for a pact.
+

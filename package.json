@@ -19,5 +19,7 @@
   "devDependencies": {
     "esbuild": "^0.28.0",
     "typescript": "^5.0.0"
-  }
+  },
+  "license": "SEE LICENSE IN LICENSE",
+  "private": true
 }
