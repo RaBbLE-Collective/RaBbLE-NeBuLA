@@ -51,7 +51,7 @@ export function createGrimoireEye(opts = {}) {
   <circle class="sc-eye-pupil" cx="20" cy="20" r="3.4"
     style="fill:var(--eye-color);filter:drop-shadow(0 0 4px var(--eye-color));transition:r 240ms"/>
   <!-- eyelid (slides in on .is-blink) -->
-  <rect class="sc-eye-lid" x="3" y="2" width="34" height="36" rx="14" fill="#03000b"/>
+  <rect class="sc-eye-lid" x="3" y="2" width="34" height="36" rx="14" fill="#0a0010"/>
 </svg>
 <div class="sc-eye-label">
   <div class="sc-eye-name">RaBbLE</div>
