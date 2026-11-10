@@ -1,8 +1,8 @@
 # CONTEXT.md — RaBbLE-NeBuLA
 
 ```
-epoch: 0 | evolution: 0 | echo: 0 | episode: 1 (in progress)
-version: v0.0.0.0 (targeting v0.0.0.1 at Episode 1 air)
+epoch: 0 | status: active
+version: v0.0.0.1-rc.1 (CDN)
 last session: 2026-07-03 (S190)
 status: Ep1 Phases 1–7 complete · Rearchitecture Phases 1–4 done · Three.js entity WIRED + ALIVE (S190) · Phase 5 (effects systems) next
 ```

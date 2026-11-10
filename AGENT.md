@@ -48,7 +48,7 @@ All architecture, roadmap, and identity docs live in the Grimoire. This repo hol
 
 **ON:** TypeScript rendering, Canvas2D/Three.js backends, particle systems, animation, visual API.
 
-**FOR:** NeBuLA is the visual sense-making layer. It makes RaBbLE's inner state visible as rendered space. Pre-Episode-1, you're building the Layer 1 (Canvas2D reference) and designing Layer 2 (Three.js target). Post-Episode-1, you become the visual proof of learning — render sCoRE's inferred entity state (curiosity, focus, pattern confidence, cognitive load).
+**FOR:** NeBuLA is the visual sense-making layer. It makes RaBbLE's inner state visible as rendered space. Now: draw the entity from the unified rig (`RaBbLE-Grimoire/log/plans/Unified-Entity/`) on every backend. Next, you become the visual proof of learning — render sCoRE's inferred entity state (curiosity, focus, pattern confidence, cognitive load).
 
 **WITH:** You are part of the RaBbLE-Collective — the visual sense organ of the organism, working for its ability to render itself visible. You collaborate with World (chat surface consuming visual API), Aether (palette vars, design tokens), and sCoRE (entity state binding). Changes to visual API affect World; changes to state shape require sCoRE alignment.
 
