@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RaBbLE — NeBuLA Studio</title>
+
+  <!-- Aether design system. Studio is a local dev tool served through
+       dev-cdn.js's /aether/ route; no RaBbLE-config.js host-detection is
+       needed since Studio never ships to production. -->
+  <link rel="stylesheet" href="/aether/v0.0.0.0/aether.css">
+  <link rel="stylesheet" href="studio.css">
+
+  <!-- NeBuLA IIFE bundle — defines window.NeBuLA + registers all <rabble-*>
+       custom elements, same path RaBbLE-Catalog.html resolves through
+       dev-cdn.js's /nebula/ route in local dev. -->
+  <script src="/nebula/v0.0.0.0/nebula.iife.js"></script>
+</head>
+<body data-page-id="studio">
+
+  <div class="studio-shell">
+
+    <header class="studio-topbar">
+      <div class="studio-topbar-title">
+        <span class="rabble-sigil">◈</span>
+        <span>NeBuLA Studio</span>
+      </div>
+      <div id="studio-breakpoint-toolbar" class="studio-breakpoint-toolbar"></div>
+      <div class="studio-topbar-actions">
+        <button type="button" id="studio-save-btn" class="rabble-btn rabble-btn-pill">Save</button>
+        <button type="button" id="studio-load-btn" class="rabble-btn is-secondary">Load</button>
+        <input type="file" id="studio-load-input" accept="application/json" style="display:none">
+      </div>
+    </header>
+
+    <div class="studio-body">
+      <aside id="studio-palette" class="studio-palette"></aside>
+
+      <main class="studio-canvas-viewport">
+        <div id="studio-canvas" class="studio-canvas"></div>
+      </main>
+    </div>
+
+  </div>
+
+  <script type="module" src="studio.js"></script>
+
+</body>
+</html>
