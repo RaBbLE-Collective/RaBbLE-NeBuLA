@@ -15,6 +15,9 @@
 
 export const THREE_CDN = 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js';
 
+/** THREE is a global set by the CDN script, not a typed property of window. */
+const globalThree = () => /** @type {any} */ (window).THREE;
+
 let _threePromise = null;
 
 /**
@@ -25,8 +28,8 @@ let _threePromise = null;
  * @returns {Promise<object>} the global THREE namespace
  */
 export function ensureThree() {
-  if (typeof window !== 'undefined' && window.THREE) {
-    return Promise.resolve(window.THREE);
+  if (typeof window !== 'undefined' && globalThree()) {
+    return Promise.resolve(globalThree());
   }
   if (_threePromise) return _threePromise;
 
@@ -38,11 +41,11 @@ export function ensureThree() {
     // A script tag may already be in flight (e.g. a host page's own CDN tag
     // added before NeBuLA mounted) — reuse it instead of adding a second.
     const existing = document.querySelector(`script[src="${THREE_CDN}"]`);
-    const onLoad  = () => (window.THREE ? resolve(window.THREE) : reject(new Error('[three-loader] THREE not set after script load')));
+    const onLoad  = () => (globalThree() ? resolve(globalThree()) : reject(new Error('[three-loader] THREE not set after script load')));
     const onError = () => reject(new Error('[three-loader] failed to load Three.js from CDN'));
 
     if (existing) {
-      if (window.THREE) { resolve(window.THREE); return; }
+      if (globalThree()) { resolve(globalThree()); return; }
       existing.addEventListener('load', onLoad);
       existing.addEventListener('error', onError);
       return;
@@ -53,7 +56,7 @@ export function ensureThree() {
     s.onload = onLoad;
     s.onerror = onError;
     document.head.appendChild(s);
-  }).catch((err) => {
+  }).catch((/** @type {unknown} */ err) => {
     _threePromise = null; // allow retry on next call rather than caching a permanent rejection
     throw err;
   });
