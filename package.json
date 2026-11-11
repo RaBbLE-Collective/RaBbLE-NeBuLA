@@ -1,6 +1,6 @@
 {
   "name": "rabble-nebula",
-  "version": "0.0.0.0",
+  "version": "0.1.0",
   "description": "Entropy-driven embeddable JS rendering engine for the RaBbLE ecosystem",
   "type": "module",
   "main": "src/index.js",
