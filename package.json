@@ -6,12 +6,12 @@
   "main": "src/index.js",
   "scripts": {
     "build": "npm run build:iife && npm run build:esm",
-    "build:iife": "npx esbuild src/index.js --bundle --format=iife --global-name=NeBuLA --external:three --outfile=dist/nebula.iife.js --minify",
-    "build:esm": "npx esbuild src/index.js --bundle --format=esm --external:three --outfile=dist/nebula.esm.js --minify",
+    "build:iife": "npx esbuild src/index.js --bundle --format=iife --global-name=NeBuLA --external:three --outfile=dist/nebula.iife.js --minify --banner:js=\"/*! NeBuLA $npm_package_version+$(git rev-parse --short HEAD 2>/dev/null || echo nogit) */\"",
+    "build:esm": "npx esbuild src/index.js --bundle --format=esm --external:three --outfile=dist/nebula.esm.js --minify --banner:js=\"/*! NeBuLA $npm_package_version+$(git rev-parse --short HEAD 2>/dev/null || echo nogit) */\"",
     "build:dev": "npx esbuild src/index.js --bundle --format=iife --global-name=NeBuLA --external:three --outfile=dist/nebula.iife.js --sourcemap",
     "build:watch": "npx esbuild src/index.js --bundle --format=iife --global-name=NeBuLA --external:three --outfile=dist/nebula.iife.js --sourcemap --watch",
-    "build:versioned": "VERSION=${npm_config_version:-v0.0.0.0} && npm run build && mkdir -p dist/$VERSION && cp dist/nebula.iife.js dist/nebula.iife.js.map dist/nebula.esm.js dist/$VERSION/ 2>/dev/null; echo \"Built → dist/$VERSION/\"",
-    "typecheck": "npx tsc --allowJs --checkJs --noEmit --strict src/index.js"
+    "build:versioned": "VERSION=${npm_config_version:-v$npm_package_version} && npm run build && mkdir -p dist/$VERSION && cp dist/nebula.iife.js dist/nebula.iife.js.map dist/nebula.esm.js dist/$VERSION/ 2>/dev/null; echo \"Built \u2192 dist/$VERSION/\"",
+    "typecheck": "npx tsc --allowJs --checkJs --noEmit --strict --resolveJsonModule src/index.js"
   },
   "peerDependencies": {
     "three": ">=0.150.0"
