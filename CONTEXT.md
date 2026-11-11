@@ -78,7 +78,7 @@ The old Episode numbering is retired (S322); members plan by milestone in `../Ra
 | 4 | Three.js backend + entropy shaders | ✅ Done |
 | 5 | Animation system (AnimationMixer) | ✅ Done |
 | 6 | Visual puppet layer — `<rabble-entity>` element in `src/element.js` | ✅ Done |
-| 7 | World integration — bundle loaded by `RaBbLE-NeBuLA.js` loader | ✅ Done |
+| 7 | World integration — bundle loaded by World's `RaBbLE-nebula-loader.js` from the CDN (vendored S190 to S323) | ✅ Done |
 | 8 | NeBuLA Studio dev tool | MVP built + verified (S198); delete/resize gizmos + visual palette added (S199) — see `RaBbLE-Grimoire/RaBbLE-NeBuLA/RaBbLE-NeBuLA-Studio.md`; inspector panel + undo/redo still open |
 
 ---
