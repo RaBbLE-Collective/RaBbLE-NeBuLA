@@ -1,0 +1,37 @@
+name: Deploy to Cloudflare Workers
+
+# Manual only. The rabble-nebula Worker serves the whole dist/ folder, and
+# every published version lives in it (dist/v0.0.0.1-rc.1/, dist/v0.1.0/, ...).
+# A clean CI checkout builds only the root bundle, so an automatic deploy on
+# push to main or on a tag would replace the Worker's assets and remove every
+# versioned path that World pins. Deploy from a local checkout instead:
+#   bash RaBbLE-Grimoire/spells/cloudflare-ctl.sh deploy nebula v<version>
+# (Genesis, S324.)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    name: Deploy NeBuLA CDN Worker
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Deploy via Wrangler
+        run: npx wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
