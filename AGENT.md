@@ -16,12 +16,12 @@ NeBuLA provides a backend-agnostic rendering surface with two immediate targets:
 
 | Layer | What | Where |
 |---|---|---|
-| **Layer 1 — Entity Persona (Canvas2D)** | 2D: eyes, portal, particle nebula, blink/saccade | **Transitional:** currently `RaBbLE-World/rabble-entity.js`; NeBuLA Canvas2D backend will absorb it |
-| **Layer 2 — Quantum Visualization (Three.js)** | 3D Flat-Chaos renderer: particle streams, entity fields, environment | This repo — Episode 1 target |
+| **Layer 1 — Entity Persona (Canvas2D)** | 2D: eyes, portal, particle nebula, blink/saccade | This repo: `src/element.js` + `src/backends/`; World renders `<rabble-entity backend="alive">` |
+| **Layer 2 — Quantum Visualization (Three.js)** | 3D Flat-Chaos renderer: particle streams, entity fields, environment | This repo: `backend="threejs"` and the 3D side of `alive` |
 
-**Layer 1 is transitional, not frozen.** `rabble-entity.js` is the reference implementation and API contract. NeBuLA's Canvas2D backend must match its `setEntityState()` / `injectEyeJolt()` interface when it replaces it. Do not duplicate Layer 1 until the Canvas2D backend is ready to fully supersede it.
+**Layer 1 lives here.** World's old `rabble-entity.js` is gone; NeBuLA's element is the entity. The public API (`setEntityState()`, `injectEyeJolt()`, the live attributes) is documented in `../RaBbLE-Grimoire/RaBbLE-NeBuLA/RaBbLE-NeBuLA-API.md`.
 
-Backend progression: Canvas2D → Three.js/WebGL → WebGPU → C++/OpenGL → Qt/QML. See `RaBbLE-NeBuLA-Roadmap.md` for episodes and exit conditions.
+Backend progression: Canvas2D → Three.js/WebGL → WebGPU → C++/OpenGL → Qt/QML. See `RaBbLE-NeBuLA-Roadmap.md` for stages and exit conditions.
 
 ---
 
@@ -29,14 +29,14 @@ Backend progression: Canvas2D → Three.js/WebGL → WebGPU → C++/OpenGL → Q
 
 | Path | What |
 |---|---|
-| `CONTEXT.md` | Current state, active branch, episode status |
+| `CONTEXT.md` | Current state, branches, roadmap status |
 | `README.md` | Public-facing description (GitHub) |
 | `studio/` | NeBuLA Studio — WYSIWYG page-layout builder dev tool (drag Aether/NeBuLA components onto a canvas, breakpoint preview, JSON save/load). Docs: RaBbLE-Grimoire/RaBbLE-NeBuLA/RaBbLE-NeBuLA-Studio.md. Plan/history: RaBbLE-Grimoire/log/plans/done/NeBuLA-Studio-Plan.md |
 | `../RaBbLE-Grimoire/RaBbLE-NeBuLA/RaBbLE-NeBuLA-Architecture.md` | Two-layer model, Layer 1 API, Layer 2 primitives |
-| `../RaBbLE-Grimoire/RaBbLE-NeBuLA/RaBbLE-NeBuLA-Roadmap.md` | Episode tracker, exit conditions, implementation notes |
+| `../RaBbLE-Grimoire/RaBbLE-NeBuLA/RaBbLE-NeBuLA-Roadmap.md` | Stages, exit conditions, implementation notes |
 | `../RaBbLE-Grimoire/RaBbLE-NeBuLA/RaBbLE-NeBuLA-Identity.md` | Entity lore, origin, philosophy |
 | `../RaBbLE-Grimoire/RaBbLE-NeBuLA/RaBbLE-NeBuLA-FlatChaos.md` | Flat-Chaos pattern spec — carry this forward |
-| `../RaBbLE-Grimoire/RaBbLE-NeBuLA/RaBbLE-NeBuLA-Ideas.md` | Enhancement proposals — Episodes 3+ reference |
+| `../RaBbLE-Grimoire/RaBbLE-NeBuLA/RaBbLE-NeBuLA-Ideas.md` | Enhancement proposals for later stages |
 | `../RaBbLE-Grimoire/RaBbLE-NeBuLA/RaBbLE-NeBuLA-RABL.md` | Scene serialization format (legacy reference) |
 | `../RaBbLE-Grimoire/RaBbLE-NeBuLA/RaBbLE-NeBuLA-RBCNS.md` | Historical naming spec — **ARCHIVED, do not follow** |
 
@@ -71,7 +71,7 @@ bash ../RaBbLE-Grimoire/spells/end-session.sh <feature-slug> "<note>"
 
 - **Colors:** `../RaBbLE-Grimoire/RaBbLE-Agent/RaBbLE-Palette.md` only — never raw hex
 - **Naming:** Clean TypeScript — no RBCNS prefixes (`q_`, `e_`, `f_`) in new code
-- **Layer 1 is transitional** — `rabble-entity.js` is the reference API; don't duplicate it until the Canvas2D backend is ready to replace it cleanly
+- **Entity API is a contract** — `setEntityState()`, `injectEyeJolt()` and the live attributes are what World drives; change them only with World alongside (`RaBbLE-NeBuLA-API.md`)
 - **No framework coupling** — NeBuLA must be embeddable standalone; no React/Vue/Svelte imports
 - **Performance contract:** 1000+ entities at 60 FPS — any change that breaks this is `%SYSTEM_DRIFT%`
 - **Docs stay in Grimoire** — architecture, roadmap, and lore do not live in this repo
@@ -82,7 +82,7 @@ bash ../RaBbLE-Grimoire/spells/end-session.sh <feature-slug> "<note>"
 
 ```bash
 cat CONTEXT.md                                                        # current state
-cat ../RaBbLE-Grimoire/RaBbLE-NeBuLA/RaBbLE-NeBuLA-Roadmap.md        # episode tracker
+cat ../RaBbLE-Grimoire/RaBbLE-NeBuLA/RaBbLE-NeBuLA-Roadmap.md        # stages and exit conditions
 cat ../RaBbLE-Grimoire/RaBbLE-NeBuLA/RaBbLE-NeBuLA-Architecture.md   # layer model and primitives
 ```
 

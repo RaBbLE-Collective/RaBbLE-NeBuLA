@@ -2,9 +2,9 @@
 
 ```
 epoch: 0 | status: active
-version: v0.0.0.1-rc.1 (CDN)
-last session: 2026-07-03 (S190)
-status: Ep1 Phases 1–7 complete · Rearchitecture Phases 1–4 done · Three.js entity WIRED + ALIVE (S190) · Phase 5 (effects systems) next
+version: 0.1.0 (Genesis; CDN path /v0.1.0/)
+last session: 2026-11-11 (S324)
+status: build phases 1–7 complete · Rearchitecture Phases 1–4 done · alive entity (2D+3D) live in World · Phase 5 (effects systems) next
 ```
 
 RaBbLE-NeBuLA is the Collective's unified rendering engine — entropy-driven, backend-agnostic, built to make RaBbLE's inner state visible as rendered space. Ships as CDN-distributed IIFE + ESM bundles.
@@ -17,7 +17,7 @@ RaBbLE-NeBuLA is the Collective's unified rendering engine — entropy-driven, b
 - esbuild IIFE + ESM outputs working
 - `npm run build` → `dist/nebula.iife.js` (5.0kb) + `dist/nebula.esm.js` (4.5kb)
 - Three.js external (peer dependency)
-- v0.0.0.0 locked for pre-Episode-1 CDN paths
+- Versioned CDN paths are immutable: `/v0.0.0.1-rc.1/` (pre-semver) and `/v0.1.0/` (Genesis)
 
 **Phase 2–5 — Core Implementation:** ✅ **COMPLETE**
 - Phase 2: Palette abstraction (`src/puppet/palette.js`) ✅ — reads Aether CSS vars, falls back to Grimoire hex
@@ -36,7 +36,7 @@ RaBbLE-NeBuLA is the Collective's unified rendering engine — entropy-driven, b
   - Per-entity value interpolation
   - Integrated into Runtime animation loop
 
-**Layer 1** (entity persona — eyes, portal, particle nebula) lives in `src/element.js` + `src/backends/canvas2d-backend.js`. Registered as `<rabble-entity>` custom element in the IIFE bundle. World loads it via `/nebula/v0.0.0.0/nebula.iife.js`.
+**Layer 1** (entity persona — eyes, portal, particle nebula) lives in `src/element.js` + `src/backends/canvas2d-backend.js`. Registered as `<rabble-entity>` custom element in the IIFE bundle. World loads it from `nebula.joinrabble.world/v<version>/nebula.iife.js` (locally, `/nebula/v0.0.0.0/` through `dev-serve.sh`).
 
 **Layer 2** (Three.js entity) — **WIRED + ALIVE as of S190.** No longer "pending":
 - `<rabble-entity backend="threejs">` opt-in on the custom element (`src/element.js`); WebGL capability check + silent fallback to Canvas2D when THREE unavailable.
@@ -54,19 +54,21 @@ RaBbLE-NeBuLA is the Collective's unified rendering engine — entropy-driven, b
 
 ---
 
-## Episode Tracker
+## Backend Roadmap
 
-| Episode | Goal | Status |
+The old Episode numbering is retired (S322); members plan by milestone in `../RaBbLE-Grimoire/registry/epochs/current.epoch.yml`. The order below still holds.
+
+| Stage | Goal | Status |
 |---|---|---|
-| 0 — NeBuLA-JS | Original implementation, established patterns | Archived in Xperimental |
-| **1 — Core Engine** | Canvas2D + Three.js backends, Flat-Chaos Runtime, 1000 entities @ 60 FPS | **Phases 1–7 done · Rearchitecture active** |
-| 2 — Pattern Library | Built-in stream patterns, BaBbLE command layer | Blocked on Ep1 completion |
-| 3 — Layer Integration | Wire entity state → NeBuLA entropy | Blocked on Ep2 |
-| 4 — World Integration | NeBuLA replaces rabble-entity.js in RaBbLE-World | Blocked on Ep3 |
-| 5 — WebGPU Backend | High-throughput rendering, 10,000 entities | Future |
-| 6 — C++/OpenGL Backend | Native rendering, Plymouth splash, Qt/QML component | Future |
+| NeBuLA-JS | Original implementation, established patterns | Archived in Xperimental |
+| **Core Engine** | Canvas2D + Three.js backends, Flat-Chaos Runtime, 1000 entities @ 60 FPS | **Phases 1–7 done · Rearchitecture active** |
+| Pattern Library | Built-in stream patterns, BaBbLE command layer | After Core Engine |
+| Layer Integration | Wire entity state → NeBuLA entropy | After Pattern Library |
+| World Integration | NeBuLA replaces rabble-entity.js in RaBbLE-World | Done: World renders `<rabble-entity backend="alive">` |
+| WebGPU Backend | High-throughput rendering, 10,000 entities | Future |
+| C++/OpenGL Backend | Native rendering, Plymouth splash, Qt/QML component | Future |
 
-### Episode 1 Phases
+### Core Engine Phases
 
 | Phase | Task | Status |
 |---|---|---|
@@ -103,8 +105,8 @@ Known-good baseline: NeBuLA `34dee62`, World `aa66550` (42,676-byte bundle)
 
 | Branch | State |
 |---|---|
-| `main` | Clean scaffold — AGENT.md, README.md, CONTEXT.md only |
-| `dev` | Episode 1 work + rearchitecture |
+| `main` | Stable: receives `release/X.Y.Z` by pull request, carries the `vX.Y.Z` tags |
+| `new-horizons` | Working branch: all development |
 
 ---
 
@@ -117,7 +119,7 @@ Full exit conditions in `../RaBbLE-Grimoire/RaBbLE-NeBuLA/RaBbLE-NeBuLA-Roadmap.
 1. This file — you are here
 2. `AGENT.md` — rules and workspace map
 3. `../RaBbLE-Grimoire/RaBbLE-NeBuLA/RaBbLE-NeBuLA-API.md` — public API reference (`<rabble-entity>` element, setEntityState, injectEyeJolt)
-4. `../RaBbLE-Grimoire/RaBbLE-NeBuLA/RaBbLE-NeBuLA-Roadmap.md` — episode tracker and exit conditions
+4. `../RaBbLE-Grimoire/RaBbLE-NeBuLA/RaBbLE-NeBuLA-Roadmap.md` — stages and exit conditions
 5. `../RaBbLE-Grimoire/RaBbLE-NeBuLA/RaBbLE-NeBuLA-Architecture.md` — layer model, Layer 1 API, Layer 2 primitives
 6. `../RaBbLE-Grimoire/RaBbLE-NeBuLA/RaBbLE-NeBuLA-FlatChaos.md` — the core pattern to implement
 7. `../RaBbLE-Grimoire/RaBbLE-NeBuLA/RaBbLE-NeBuLA-Plan.md` — step-by-step implementation guide (8 phases)
@@ -126,7 +128,8 @@ Full exit conditions in `../RaBbLE-Grimoire/RaBbLE-NeBuLA/RaBbLE-NeBuLA-Roadmap.
 
 **Build system:** esbuild (IIFE + ESM)  
 **Output:** `dist/nebula.iife.js`, `dist/nebula.esm.js` + sourcemaps  
-**CDN versioning:** Five-Es (`v0.0.0` pre-Episode-1, `v0.0.0.1` after air)  
+**Versioning:** semver from `package.json`; each bundle's first line names version and commit (`/*! NeBuLA 0.1.0+<sha> */`). Rules: `../RaBbLE-Grimoire/RaBbLE-Versioning.md`  
+**Deploy:** `bash RaBbLE-Grimoire/spells/cloudflare-ctl.sh deploy nebula v<version>` from the Collective root (CI deploy is manual only, see the workflow note)  
 **See:** `../RaBbLE-Grimoire/RaBbLE-NeBuLA/RaBbLE-NeBuLA-API.md`
 
 ## Scripts
@@ -136,5 +139,5 @@ npm run build          # Production: minified IIFE + ESM
 npm run build:iife    # IIFE only
 npm run build:esm     # ESM only
 npm run build:dev     # Dev: sourcemaps, unminified
-npm run typecheck     # Verify JSDoc types
+npm run typecheck     # Strict JSDoc check: known to fail (about 1,680 errors, never passed); not a release gate
 ```
