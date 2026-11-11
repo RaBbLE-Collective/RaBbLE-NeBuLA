@@ -91,9 +91,8 @@ cat ../RaBbLE-Grimoire/RaBbLE-NeBuLA/RaBbLE-NeBuLA-Architecture.md   # layer mod
 After any canvas or visual change, cast the screenshot spell to see the result:
 
 ```bash
-# Build + deploy to World
-npm run build:iife && cp dist/nebula.iife.js ../RaBbLE-World/world/js/RaBbLE-NeBuLA.js
-
+# World loads NeBuLA from dist/ through dev-serve locally (no copy into World since S324;
+# production loads the pinned CDN release). dev-serve's watcher rebuilds dist/ on save.
 # Serve everything (separate terminal) — never python -m http.server or raw esbuild watch:
 bash ../RaBbLE-Grimoire/spells/dev-serve.sh
 # Starts Aether + NeBuLA watchers and the local CDN mock at http://localhost:8000
