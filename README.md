@@ -1,16 +1,8 @@
 # RaBbLE-NeBuLA
 
-> The rendering engine of the RaBbLE Collective. It draws the entity's face and the spaces around it.
+The animation engine behind RaBbLE's face. Drop one script into a page and the `<rabble-entity>` element draws the eyes, portals and particle nebula, in 2D (Canvas2D) or 3D (Three.js), falling back to 2D when WebGL is not there.
 
-**Version:** `0.1.0` (Genesis) · **Live:** the entity on [joinrabble.world](https://joinrabble.world), served from [nebula.joinrabble.world](https://nebula.joinrabble.world/v0.1.0/nebula.iife.js) · **Versioning:** [semver, per member](https://github.com/RaBbLE-Collective/RaBbLE-Grimoire/blob/main/RaBbLE-Versioning.md)
-
----
-
-## What NeBuLA is
-
-NeBuLA makes RaBbLE's inner state visible. It ships as one script that registers custom elements, chiefly `<rabble-entity>`: the eyes, portals and particle nebula that are RaBbLE's face. It renders in 2D (Canvas2D) or 3D (Three.js/WebGL) and falls back to 2D when WebGL is not there.
-
-Underneath sits the **Flat-Chaos** pattern: a scene is a flat stream of self-contained entities, each with its own geometry, transform and entropy value. No scene graph. A single entropy scalar (0 to 1) drives variation in shape, shading and motion.
+**Genesis release `0.1.0`** · Live on [joinrabble.world](https://joinrabble.world), served from [nebula.joinrabble.world](https://nebula.joinrabble.world/v0.1.0/nebula.iife.js)
 
 ## Quickstart
 
@@ -74,14 +66,11 @@ bash RaBbLE-Grimoire/spells/cloudflare-ctl.sh deploy nebula v0.1.0
 
 The `rabble-nebula` Worker serves the whole `dist/` folder, including every earlier version path, so the GitHub workflow can only be started by hand (see the note in `.github/workflows/deploy.yml`).
 
-## Branches
+## More
 
-`new-horizons` is the working branch. `main` is stable: it receives `release/X.Y.Z` branches by pull request and carries the `vX.Y.Z` tags.
+The Flat-Chaos spec, architecture and roadmap are in the [Grimoire, NeBuLA section](https://github.com/RaBbLE-Collective/RaBbLE-Grimoire/tree/main/RaBbLE-NeBuLA).
 
 ## Licence
 
-RaBbLE-NeBuLA is under the **RaBbLE Sovereign Accord**: source-available, not open source. Personal use encouraged, commercial use reserved, the name and the face reserved. See [LICENSE](LICENSE).
+Source-available under the RaBbLE Sovereign Accord: free for personal use, commercial use by agreement. See [LICENSE](LICENSE).
 
----
-
-Part of the [RaBbLE Collective](https://github.com/RaBbLE-Collective/RaBbLE-Collective). Architecture, roadmap and the Flat-Chaos spec live in the [Grimoire, NeBuLA section](https://github.com/RaBbLE-Collective/RaBbLE-Grimoire/tree/main/RaBbLE-NeBuLA).
